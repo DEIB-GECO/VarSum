@@ -1,0 +1,7 @@
+sqlalchemy
+Flask==1.1.1
+Flask-SQLAlchemy==2.4.0
+Flask-WTF==0.14.2
+PostgreSQL==11.2
+Psycopg2==2.8.4
+Prettytable==0.7.2
