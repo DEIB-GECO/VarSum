@@ -46,6 +46,40 @@ paths:
                 items:
                   type: string
 
+  /most_common_mutations:
+    post:
+      operationId: api_with_connexion.most_common_mutations
+      summary: Returns the most common and the rarest mutations inside the selected population.
+      requestBody:
+        $ref: '#/components/requestBodies/input-parameters'
+
+      responses:
+        '200':
+          description: A JSON array with the numerosity of the selected mutations by groups of attributes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /rarest_mutations:
+    post:
+      operationId: api_with_connexion.rarest_mutations
+      summary: Returns the most common and the rarest mutations inside the selected population.
+      requestBody:
+        $ref: '#/components/requestBodies/input-parameters'
+
+      responses:
+        '200':
+          description: A JSON array with the numerosity of the selected mutations by groups of attributes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
 components:  # <- defines reusable components
   requestBodies:
     input-parameters:

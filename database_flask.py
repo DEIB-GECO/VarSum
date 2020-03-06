@@ -23,7 +23,8 @@ class DBFunctions:
     log_sql_commands: bool = False
     default_metadata_table_name = 'genomes_metadata'
     default_metadata_schema_name = 'dw'
-    default_region_table_name = 'genomes_reduced_colset'
+    default_region_table_name = 'genomes_reduced_colset'  # 100 samples
+    # default_region_table_name = 'genomes_full_data_red'  # 2535 samples
     default_region_schema_name = 'rr'
 
     def __init__(self, connection):
@@ -146,7 +147,7 @@ class DBFunctions:
         arguments = locals()
         free_dimensions = {key for key in arguments.keys() if arguments[key] is None}
         print('free dimensions', free_dimensions)
-        constrained_dimensions = set(arguments.keys()).difference(free_dimensions)
+        constrained_dimensions = set(arguments.keys()).difference(free_dimensions).discard('self')
         print('constrained dimensions', constrained_dimensions)
         columns_in_select = [self.metadata.c.item_id] + [self.metadata.c[col] for col in free_dimensions]
         query = select(columns_in_select)
@@ -386,24 +387,56 @@ class DBFunctions:
             self.show_stmt(stmt, 'QUERY MUT FREQUENCY WITH CUBE ON FREE DIMENSIONS')
         return self.connection.execute(stmt)
 
-    def most_common_and_rarest_mut_in_sample_set(self, samples_view_name: str):
+    def most_common_mut_in_sample_set(self, samples_view_name: str, region_table_name: Optional[str], from_schema: Optional[str]):
         if samples_view_name is None:
             raise ValueError('sample view name cannot be None. Please use some filter condition.')
         sample_view = Table(samples_view_name, self.db_meta, autoload=True, autoload_with=self.connection,
                             schema='dw')
+
+        # consider only variants owned by the individuals in sample_view
+        from_table = self.genomes.join(right=sample_view, onclause=self.genomes.c.item_id == sample_view.c.item_id)
+        if region_table_name is not None:
+            # consider only variants owned by the individuals in sample view and in region_table
+            region_table = Table(region_table_name, self.db_meta, autoload=True, autoload_with=self.connection, schema=from_schema)
+            from_table = from_table.join(right=region_table, onclause=region_table.c.item_id == sample_view.c.item_id)
+
+        # defines custom functions
         func_occurrence = (func.sum(self.genomes.c.al1) + func.sum(func.coalesce(self.genomes.c.al2, 0))).label('occurrence')
         func_samples = func.count(self.genomes.c.item_id).label('samples')
-        stmt = select([self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt, func_occurrence, func_samples])\
-            .select_from(self.genomes.join(right=sample_view,
-                                           onclause=self.genomes.c.item_id == sample_view.c.item_id))\
+        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples).label('frequency')
+
+        stmt = select([self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt, func_occurrence, func_samples, func_frequency])\
+            .select_from(from_table)\
             .group_by(self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt) \
-            .order_by(desc((func_occurrence / func_samples)))
-        most_common_stmt = stmt.order_by(desc((func_occurrence / func_samples))).limit(5)
-        rarest_stmm = stmt.order_by(desc((func_occurrence / func_samples))).limit(5)
+            .order_by(desc(func_frequency)).limit(5)
+
         if self.log_sql_commands:
-            self.show_stmt(most_common_stmt, 'MOST FREQUENT MUTATIONS IN SAMPLE SET')
-            self.show_stmt(rarest_stmm, 'RAREST MUTATIONS IN SAMPLE SET')
-        # TODO enable execution
-        print('EXECUTION OF THESE QUERIES NOT YET ENABLED. NEEDS VERIFICATION')
-        # self.connection.execute(most_common_stmt)
-        # self.connection.execute(rarest_stmm)
+            self.show_stmt(stmt, 'MOST FREQUENT MUTATIONS IN SAMPLE SET')
+        return self.connection.execute(stmt)
+
+    def rarest_mut_in_sample_set(self, samples_view_name: str, region_table_name: Optional[str], from_schema: Optional[str]):
+        if samples_view_name is None:
+            raise ValueError('sample view name cannot be None. Please use some filter condition.')
+        sample_view = Table(samples_view_name, self.db_meta, autoload=True, autoload_with=self.connection,
+                            schema='dw')
+
+        # consider only variants owned by the individuals in sample_view
+        from_table = self.genomes.join(right=sample_view, onclause=self.genomes.c.item_id == sample_view.c.item_id)
+        if region_table_name is not None:
+            # consider only variants owned by the individuals in sample view and in region_table
+            region_table = Table(region_table_name, self.db_meta, autoload=True, autoload_with=self.connection, schema=from_schema)
+            from_table = from_table.join(right=region_table, onclause=region_table.c.item_id == sample_view.c.item_id)
+
+        # defines custom functions
+        func_occurrence = (func.sum(self.genomes.c.al1) + func.sum(func.coalesce(self.genomes.c.al2, 0))).label('occurrence')
+        func_samples = func.count(self.genomes.c.item_id).label('samples')
+        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples).label('frequency')
+
+        stmt = select([self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt, func_occurrence, func_samples, func_frequency])\
+            .select_from(from_table)\
+            .group_by(self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt)\
+            .order_by(asc(func_frequency)).limit(5)
+
+        if self.log_sql_commands:
+            self.show_stmt(stmt, 'RAREST MUTATIONS IN SAMPLE SET')
+        return self.connection.execute(stmt)

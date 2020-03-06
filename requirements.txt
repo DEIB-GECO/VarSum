@@ -9,4 +9,4 @@ flask-marshmallow
 marshmallow-sqlalchemy
 PostgreSQL==11.2
 Psycopg2==2.8.4
-Prettytable==0.7.2
+Prettytable

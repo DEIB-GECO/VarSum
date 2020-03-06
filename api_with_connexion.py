@@ -14,6 +14,7 @@ db_user = sys.argv[1]
 db_password = sys.argv[2]
 output_redirect = sys.stdout
 
+connections_counter = 0
 
 class ReqParamKeys:
     META = 'meta'
@@ -61,7 +62,10 @@ def samples(body):
             samples_with_meta_attrs_t_name or db_functions.default_metadata_table_name,
             samples_with_region_attrs_t_name,
             'dw')
+        print('response contains {} rows'.format(result.rowcount))
         marshalled = result_proxy_as_dict(result)
+        if samples_with_meta_attrs_t_name is not None:
+            db_functions.drop_view(samples_with_meta_attrs_t_name, 'dw')
         db_functions.disconnect()
         return marshalled
 
@@ -93,16 +97,41 @@ def mutations(body):
     return try_and_catch(go, body)
 
 
-# ENDPOINT for most-common/rarest mutations #TODO change this name
-def top_mutations(body):
+# ENDPOINT for most-common mutations #TODO change this name
+def most_common_mutations(body):
     def go(with_param):
         meta_attrs = with_param.get(ReqParamKeys.META)
+        region_attrs = with_param.get(ReqParamKeys.VARIANTS)
         db_functions = get_and_config_db_functions()
         # apply filter criteria
         samples_with_meta_attrs_t_name = create_meta_view(db_functions,
                                                           meta_attrs) or db_functions.default_metadata_table_name
+        samples_with_region_attrs_t_name = create_region_table(db_functions, region_attrs)
         # compute result
-        result = db_functions.most_common_and_rarest_mut_in_sample_set(samples_with_meta_attrs_t_name)
+        result = db_functions.most_common_mut_in_sample_set(samples_with_meta_attrs_t_name,
+                                                            samples_with_region_attrs_t_name,
+                                                            'dw')
+        marshalled = result_proxy_as_dict(result)
+        db_functions.disconnect()
+        return marshalled
+
+    return try_and_catch(go, body)
+
+
+# ENDPOINT for rarest mutations #TODO change this name
+def rarest_mutations(body):
+    def go(with_param):
+        meta_attrs = with_param.get(ReqParamKeys.META)
+        region_attrs = with_param.get(ReqParamKeys.VARIANTS)
+        db_functions = get_and_config_db_functions()
+        # apply filter criteria
+        samples_with_meta_attrs_t_name = create_meta_view(db_functions,
+                                                          meta_attrs) or db_functions.default_metadata_table_name
+        samples_with_region_attrs_t_name = create_region_table(db_functions, region_attrs)
+        # compute result
+        result = db_functions.rarest_mut_in_sample_set(samples_with_meta_attrs_t_name,
+                                                       samples_with_region_attrs_t_name,
+                                                       'dw')
         marshalled = result_proxy_as_dict(result)
         db_functions.disconnect()
         return marshalled
@@ -118,7 +147,14 @@ def result_proxy_as_dict(result_proxy):
 
 
 def get_and_config_db_functions() -> DBFunctions:
-    db = DBFunctions(db_engine.connect().execution_options(autocommit=True))
+    # get connection from pool
+    connection = db_engine.connect().execution_options(autocommit=True)
+    global connections_counter
+    if connection.info.get('connections_counter') is None:
+        connections_counter += 1
+        connection.info['connections_counter'] = connections_counter
+    print('got connection with number {} from connection pool'.format(connection.info.get('connections_counter')))
+    db = DBFunctions(connection)
     if DB_LOG_STATEMENTS:
         db.log_sql_commands = True
     return db
