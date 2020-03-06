@@ -15,3 +15,13 @@ class Mutation:
         self.chrom = chrom
         self.start = start
         self.alt = alt
+
+
+def from_dict(mutation_dict: dict):
+    if mutation_dict.get('id') is not None:
+        return Mutation(_id=mutation_dict['id'])
+    elif mutation_dict.get('chrom') is not None and mutation_dict.get('start') is not None and mutation_dict.get('alt') is not None:
+        return Mutation(chrom=mutation_dict['chrom'], start=mutation_dict['start'], alt=mutation_dict['alt'])
+    else:
+        raise ValueError('Cannot identify Mutation. One between ID and (chrom, start, alt) must be '
+                         'provided')

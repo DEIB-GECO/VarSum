@@ -1,0 +1,148 @@
+openapi: 3.0.0
+info:
+  title: Data summarization 1KG
+  description: >
+    This API returns summary statistics on user-defined populations and their
+    variants, as the ones identified during the 1000 Genomes Project.
+    For more information visit https%3A%2F%2Fgithub.com%2Ftomalf2%2Fdata_summarization_1KG
+  version: 0.1.0
+
+servers:
+  - url: http://api.example.com/
+    description: Optional server description, e.g. Main (production) server
+
+paths:
+  /samples:
+    post:
+      operationId: api_with_connexion.samples
+      summary: Returns the distribution of the individuals inside the selected population.
+      requestBody:
+        $ref: '#/components/requestBodies/input-parameters'
+
+      responses:
+        '200':
+          description: A JSON array with the numerosity of the individuals by groups of attributes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /mutations:
+    post:
+      operationId: api_with_connexion.mutations
+      summary: Returns the distribution of the selected mutations inside the selected population.
+      requestBody:
+        $ref: '#/components/requestBodies/input-parameters'
+
+      responses:
+        '200':
+          description: A JSON array with the numerosity of the selected mutations by groups of attributes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+components:  # <- defines reusable components
+  requestBodies:
+    input-parameters:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/input-schema'
+
+  schemas:
+    schema-mutation-by-id:
+      type: object
+      properties:
+        id:
+          type: string
+      required:
+        - id
+      example:
+        id: rs642251
+
+    schema-mutation-by-coordinates:
+      type: object
+      properties:
+        chrom:
+          type: integer
+        start:
+          type: integer
+        alt:
+          type: string
+      required:
+        - chrom
+        - start
+        - alt
+      example:
+        chrom: 1
+        start: 176541
+        alt: C
+
+    schema-mutation:
+      anyOf:
+        - $ref: '#/components/schemas/schema-mutation-by-id'
+        - $ref: '#/components/schemas/schema-mutation-by-coordinates'
+
+    input-schema:
+        type: object
+        properties:
+          meta:
+            type: object
+            properties:
+              gender:
+                type: string
+              dna_source:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  type: string
+              assembly:
+                type: string
+              population_code:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  type: string
+              super_population_code:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  type: string
+              health_status:
+                type: string
+            required:
+              - assembly
+          variants:
+            type: object
+            minProperties: 1
+            properties:
+              with:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  $ref: '#/components/schemas/schema-mutation'
+              on_same_chrom_copy:
+                type: array
+                minItems: 2
+                uniqueItems: true
+                items:
+                  $ref: '#/components/schemas/schema-mutation'
+              on_diff_chrom_copy:
+                type: array
+                minItems: 2
+                maxItems: 2
+                uniqueItems: true
+                items:
+                  $ref: '#/components/schemas/schema-mutation'
+        required:
+          - meta

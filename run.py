@@ -13,9 +13,10 @@ if __name__ == '__main__':
 
 # FILTER BY METADATA
 # view_of_samples_name = 'sample_view' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
-# db.view_of_samples_with_metadata(view_of_samples_name, 'female', 'true', None, 'hg19', ['PJL'], None)
+# db.view_of_samples_with_metadata(view_of_samples_name, health_status='true', assembly='hg19', super_population=['EAS'])
 # db.print_table_named(view_of_samples_name, 'dw')
-view_of_samples_name = 'sample_view_2020_02_19_16_58_51'
+# view_of_samples_name = 'sample_view_2020_02_19_16_58_51'
+view_of_samples_name = 'sample_view_2020_03_05_03_35_23'  # super-pop EAS, assembly hg19, healthy
 
 # these two are on different chromosome copies
 mut1 = Mutation(_id='rs367896724')
@@ -30,43 +31,47 @@ mut4_fingerprint = Mutation(1, 10615, '')
 
 # HAVING MUTATIONS 3 AND 4
 # samples_having_all_mutations_name = 'samples_with_mut3_and_4' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
-# db.with_all_mutations(view_of_samples_name, samples_having_all_mutations_name, 'dw', mut3_al1, mut4_al1)
+# db.table_with_all_of_mutations(None, samples_having_all_mutations_name, 'dw', mut3_al1, mut4_al1)
 # db.print_table_named(samples_having_all_mutations_name, 'dw')
-samples_having_all_mutations_name = 'samples_with_mut3_and_4_2020_02_26_23_14_01'
+samples_having_all_mutations_name = 'samples_with_mut3_and_4_2020_03_04_20_17_43'
 
 # HAVING MUTATIONS 3 AND 4 ON SAME CHROMOSOME COPY
 # samples_having_all_mutations_on_same_chrom_copy_name = 'with_mutations_on_same_chrom_copy' + \
 #                                                        datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
-# db.with_all_mutations_on_same_chrom_copy(samples_having_all_mutations_name, 'dw',
+# db.table_mutations_on_same_chrom_copy(None, 'dw',
 #                                          samples_having_all_mutations_on_same_chrom_copy_name, 'dw', mut3_al1, mut4_al1)
 # db.print_table_named(samples_having_all_mutations_on_same_chrom_copy_name, 'dw')
-samples_having_all_mutations_on_same_chrom_copy_name = 'with_mutations_on_same_chrom_copy_2020_02_26_23_39_24'
+samples_having_all_mutations_on_same_chrom_copy_name = 'with_mutations_on_same_chrom_copy_2020_03_04_20_37_09'
 
 # HAVING MUTATIONS 1 AND 2 ON DIFFERENT CHROMOSOME COPIES
 # samples_having_mut_on_different_chrom_copy_name = 'with_mutations_on_diff_chrom_copy' + \
 #                                                        datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
-# db.with_mutations_on_different_chrom_copies('samples_region_view_2020_02_25_21_43_34', 'dw',
-#                                          samples_having_mut_on_different_chrom_copy_name, 'dw', mut1, mut2_fingerprint)
+# db.table_mutations_on_different_chrom_copies(None, 'dw',
+#                                             samples_having_mut_on_different_chrom_copy_name, 'dw', mut1, mut2_fingerprint)
 # db.print_table_named(samples_having_mut_on_different_chrom_copy_name, 'dw')
-samples_having_mut_on_different_chrom_copy_name = 'with_mutations_on_diff_chrom_copy_2020_02_25_23_30_44'
+samples_having_mut_on_different_chrom_copy_name = 'with_mutations_on_diff_chrom_copy_2020_03_04_20_21_33'
+
+# MAKES AND OF CHARACTERISTICS BY INDIVIDUAL
+# regions_from_common_item_id_name = 'regions_common_item_id' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
+# db.take_regions_of_common_individuals(regions_from_common_item_id_name, 'dw',
+#                                       [samples_having_all_mutations_name,
+#                                        samples_having_all_mutations_on_same_chrom_copy_name,
+#                                        samples_having_mut_on_different_chrom_copy_name],
+#                                       ['dw', 'dw', 'dw'])
+# db.print_table_named(regions_from_common_item_id_name, 'dw')
+regions_from_common_item_id_name = 'regions_common_item_id_2020_03_05_03_26_01'
+
 
 # COUNT OF SAMPLES BY DIMENSION
-# count_result = db.count_samples_by_dimensions('samples_with_metadata')
+# count_result = db.count_samples_by_dimensions(view_of_samples_name, regions_from_common_item_id_name, 'dw')
 # db.print_query_result(count_result)
 
 
 # MUTATION FREQUENCY BY DIMENSION
-freq_result = db.mutation_frequency_by_dimensions('samples_for_counting', 'region_for_counting_lim', 'dw')
-db.print_query_result(freq_result)
+# freq_result = db.mutation_frequency_by_dimensions(view_of_samples_name, regions_from_common_item_id_name, 'dw')
+# print('row count {}'.format(freq_result.rowcount))
+# db.print_query_result(freq_result)
 
-# EVERY TIME EACH USER MAINTAINS TWO ELEMENTS: A VIEW OF THE SAMPLES, AND A TABLE OF THE MUTATIONS OWN BY THESE SAMPLES
-# A CHANGE IN ONE OF THE TWO MUST REFLECT ON THE OTHER
-
-
-# source_table_name = 'mut_of_529_and_902'  # schema 'dw'
-# temp_table_name = 'temp_'+datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
-# db.with_all_mutations_on_same_chrom_copy(source_table_name, 'dw', temp_table_name, 'dw', mut3_al1, mut4_al1)
-# db.print_table_named(temp_table_name, 'dw')
 
 if db is not None:
     db.disconnect()
