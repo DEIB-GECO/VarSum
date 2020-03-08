@@ -211,7 +211,6 @@ def create_region_table(db: DBFunctions, region_attrs: dict) -> Optional[str]:
                                                          'dw',
                                                          *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY]))
             partial_result_table_names.append(table_name)
-        print('LENGTH OF PARTIAL RESULT TABLE NAMES ', len(partial_result_table_names))
         if len(partial_result_table_names) == 0:    # when no filter on regions is applied
             return None
         elif len(partial_result_table_names) == 1:  # when only one filter kind
