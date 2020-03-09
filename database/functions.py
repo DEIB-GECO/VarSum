@@ -1,8 +1,7 @@
 from sqlalchemy import *
 from sqlalchemy.engine import ResultProxy
-import create_view_module
-import create_table_module
-from mutation import Mutation
+from database import create_view_module, create_table_module
+from mutation_adt import Mutation
 from prettytable import PrettyTable
 from datetime import datetime
 from functools import reduce

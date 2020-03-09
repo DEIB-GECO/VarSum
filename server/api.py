@@ -1,9 +1,9 @@
 import connexion
-import mutation
+import mutation_adt
 from flask import redirect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import exc as sqlalchemy_exceptions
-from database_flask import DBFunctions
+from database.functions import DBFunctions
 from datetime import datetime
 from typing import Optional
 import traceback
@@ -230,7 +230,7 @@ def parse_to_mutation_array(dict_array_of_mutations):
     :param dict_array_of_mutations: the array of dictionary elements, each one representing a mutation.
     :return: an array of Mutation objects.
     """
-    return [mutation.from_dict(a_dict) for a_dict in dict_array_of_mutations]
+    return [mutation_adt.from_dict(a_dict) for a_dict in dict_array_of_mutations]
 
 
 def service_unavailable_message():

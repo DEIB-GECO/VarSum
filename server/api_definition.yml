@@ -14,7 +14,7 @@ servers:
 paths:
   /individuals:
     post:
-      operationId: api_with_connexion.individuals
+      operationId: api.individuals
       summary: >
         Returns the distribution of the individuals inside a population of individuals having the
         requested characteristics.
@@ -33,7 +33,7 @@ paths:
 
   /most_common_mutations:
     post:
-      operationId: api_with_connexion.most_common_mutations
+      operationId: api.most_common_mutations
       summary: Returns the most common and the rarest mutations inside the selected population.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'
@@ -50,7 +50,7 @@ paths:
 
   /rarest_mutations:
     post:
-      operationId: api_with_connexion.rarest_mutations
+      operationId: api.rarest_mutations
       summary: Returns the most common and the rarest mutations inside the selected population.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'

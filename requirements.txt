@@ -2,12 +2,7 @@ sqlalchemy
 connexion
 swagger-ui-bundle
 Flask==1.1.1
-Flask-SQLAlchemy==2.4.0
-Flask-WTF==0.14.2
-marshmallow==3.5.0
-flask-marshmallow
-marshmallow-sqlalchemy
-PostgreSQL==11.2
+Flask-SQLAlchemy
 Psycopg2==2.8.4
 Prettytable
 matplotlib # this and the following packages are required only for running the PyNotebook in /demo/
