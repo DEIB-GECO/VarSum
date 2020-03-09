@@ -12,33 +12,18 @@ servers:
     description: Optional server description, e.g. Main (production) server
 
 paths:
-  /samples:
+  /individuals:
     post:
-      operationId: api_with_connexion.samples
-      summary: Returns the distribution of the individuals inside the selected population.
+      operationId: api_with_connexion.individuals
+      summary: >
+        Returns the distribution of the individuals inside a population of individuals having the
+        requested characteristics.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'
 
       responses:
         '200':
           description: A JSON array with the numerosity of the individuals by groups of attributes.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-
-  /mutations:
-    post:
-      operationId: api_with_connexion.mutations
-      summary: Returns the distribution of the selected mutations inside the selected population.
-      requestBody:
-        $ref: '#/components/requestBodies/input-parameters'
-
-      responses:
-        '200':
-          description: A JSON array with the numerosity of the selected mutations by groups of attributes.
           content:
             application/json:
               schema:

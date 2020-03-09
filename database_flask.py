@@ -23,7 +23,7 @@ class DBFunctions:
     log_sql_commands: bool = False
     default_metadata_table_name = 'genomes_metadata'
     default_metadata_schema_name = 'dw'
-    default_region_table_name = 'genomes_reduced_colset'  # 100 samples
+    default_region_table_name = 'genomes_full_data_red'  # 100 samples
     # default_region_table_name = 'genomes_full_data_red'  # 2535 samples
     default_region_schema_name = 'rr'
 
@@ -105,7 +105,7 @@ class DBFunctions:
         if mutation.id is not None:
             query = query.where(self.genomes.c.id == mutation.id)
         else:  # don't need further checks: the existence of (chrom, start, alt) is already checked in the constructor of Mutation
-            query = query.where(self.genomes.c.chom == mutation.chrom) \
+            query = query.where(self.genomes.c.chrom == mutation.chrom) \
                 .where(self.genomes.c.start == mutation.start) \
                 .where(self.genomes.c.alt == mutation.alt)
         if self.log_sql_commands:
@@ -373,13 +373,18 @@ class DBFunctions:
         region_table = Table(region_table_name, self.db_meta, autoload=True, autoload_with=self.connection, schema=from_schema)
         sample_view = Table(samples_view_name, self.db_meta, autoload=True, autoload_with=self.connection, schema='dw') if samples_view_name is not None else self.metadata
         free_dimension_columns = [sample_view.c[col.name] for col in sample_view.columns if col.name != 'item_id']
+
+        # defines custom functions
+        func_occurrence = (func.sum(region_table.c.al1) + func.sum(func.coalesce(region_table.c.al2, 0))).label('occurrence')
+        func_samples = func.count(region_table.c.item_id).label('samples')
+        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples, region_table.c.chrom).label('frequency')
+
         stmt = select([
             # here I select chrom, start, alt and then I group by these, however it is possible to do so also by id
             # but id may be null.
                       region_table.c.chrom, region_table.c.start, region_table.c.alt,
-                      func.count(region_table.c.item_id).label('samples'),
-                      (func.sum(region_table.c.al1) + func.sum(func.coalesce(region_table.c.al2, 0))).label('occurrence')
-                  ] + free_dimension_columns) \
+                      func_occurrence, func_samples, func_frequency
+                      ] + free_dimension_columns) \
             .select_from(region_table.join(sample_view, sample_view.c.item_id == region_table.c.item_id)) \
             .group_by(region_table.c.chrom, region_table.c.start, region_table.c.alt, func.cube(*free_dimension_columns))\
             .order_by(region_table.c.chrom, region_table.c.start, region_table.c.alt)
@@ -403,7 +408,7 @@ class DBFunctions:
         # defines custom functions
         func_occurrence = (func.sum(self.genomes.c.al1) + func.sum(func.coalesce(self.genomes.c.al2, 0))).label('occurrence')
         func_samples = func.count(self.genomes.c.item_id).label('samples')
-        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples).label('frequency')
+        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples, self.genomes.c.chrom).label('frequency')
 
         stmt = select([self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt, func_occurrence, func_samples, func_frequency])\
             .select_from(from_table)\

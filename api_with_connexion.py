@@ -48,49 +48,30 @@ def home():
     return redirect('ui/')
 
 
-# ENDPOINT for /samples #TODO change this name
-def samples(body):
+# ENDPOINT for /individuals #TODO change this name
+def individuals(body):
     def go(with_param):
         meta_attrs = with_param.get(ReqParamKeys.META)
         region_attrs = with_param.get(ReqParamKeys.VARIANTS)
         db_functions = get_and_config_db_functions()
         # apply filter criteria
-        samples_with_meta_attrs_t_name = create_meta_view(db_functions, meta_attrs)
+        samples_with_meta_attrs_t_name = create_meta_view(db_functions, meta_attrs) or db_functions.default_metadata_table_name
         samples_with_region_attrs_t_name = create_region_table(db_functions, region_attrs)
         # compute result
-        result = db_functions.count_samples_by_dimensions(
-            samples_with_meta_attrs_t_name or db_functions.default_metadata_table_name,
-            samples_with_region_attrs_t_name,
-            'dw')
-        print('response contains {} rows'.format(result.rowcount))
+        if samples_with_region_attrs_t_name is None:
+            result = db_functions.count_samples_by_dimensions(
+                samples_with_meta_attrs_t_name or db_functions.default_metadata_table_name,
+                None,
+                'dw')
+        else:
+            result = db_functions.mutation_frequency_by_dimensions(
+                samples_with_meta_attrs_t_name,
+                samples_with_region_attrs_t_name,
+                'dw')
+        print('response contains {} rows'.format(result.rowcount), file=output_redirect)
         marshalled = result_proxy_as_dict(result)
         if samples_with_meta_attrs_t_name is not None:
             db_functions.drop_view(samples_with_meta_attrs_t_name, 'dw')
-        db_functions.disconnect()
-        return marshalled
-
-    return try_and_catch(go, body)
-
-
-# ENDPOINT for /mutations #TODO change this name
-def mutations(body):
-    def go(with_param):
-        meta_attrs = with_param.get(ReqParamKeys.META)
-        region_attrs = with_param.get(ReqParamKeys.VARIANTS)
-        db_functions = get_and_config_db_functions()
-        # apply filter criteria
-        samples_with_meta_attrs_t_name = create_meta_view(db_functions,
-                                                          meta_attrs) or db_functions.default_metadata_table_name
-        samples_with_region_attrs_t_name = create_region_table(db_functions, region_attrs)
-        if samples_with_meta_attrs_t_name is None:
-            print('Cannot compute the distribution of the mutations, if no mutation is selected.', file=output_redirect)
-            return bad_request_message()
-        # compute result
-        result = db_functions.mutation_frequency_by_dimensions(
-            samples_with_meta_attrs_t_name,
-            samples_with_region_attrs_t_name,
-            'dw')
-        marshalled = result_proxy_as_dict(result)
         db_functions.disconnect()
         return marshalled
 
