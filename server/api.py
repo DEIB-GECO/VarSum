@@ -48,7 +48,82 @@ def home():
     return redirect('ui/')
 
 
-# ENDPOINT for /individuals #TODO change this name
+def values(items):
+    # 1st implementation runs a select distinct in the database for every attribute
+    def go(with_param):
+        # input is already whitelisted
+        db_functions = get_and_config_db_functions()
+        results = [db_functions.distinct_values_for(item) for item in with_param]
+        # put in serializable format
+        serializable_results = {}
+        for result_proxy in results:
+            attribute_name = result_proxy.keys()[0]
+            attribute_values = [row.values()[0] for row in result_proxy.fetchall()]
+            serializable_results[attribute_name] = attribute_values
+        return serializable_results
+
+    # return try_and_catch(go, items)
+
+    # since an attribute can also be mut_type which is not indexed, answering takes forever. This is an easy solution
+    # considered that the underlying data is updated rarely, we don't need an index on mut_type.
+
+    distinct_values = {
+        'assembly': [
+    'hg19',
+    'GRCh38'
+  ],
+        'dna_source': [
+    'lcl',
+    # '',
+    'blood'
+  ],
+        'gender': [
+    'female',
+    'male'
+  ],
+        'population': [
+    'ITU',
+    'ASW',
+    'ACB',
+    'MXL',
+    'CHB',
+    'GWD',
+    'CLM',
+    'YRI',
+    'PUR',
+    'GIH',
+    'TSI',
+    'BEB',
+    'IBS',
+    'MSL',
+    'PEL',
+    'LWK',
+    'ESN',
+    'PJL',
+    'GBR',
+    'JPT',
+    'STU',
+    'CHS',
+    'KHV',
+    'CEU',
+    'FIN',
+    'CDX'
+  ],
+        'super_population': [
+    'EAS',
+    'AFR',
+    'EUR',
+    'AMR',
+    'SAS'
+  ],
+        'mut_type': ['SNP', 'DEL', 'INS', 'CNV', 'MNP', 'SVA', 'ALU', 'LINE1']
+    }
+    result = {}
+    for item in items:
+        result[item] = distinct_values[item]
+    return result
+
+
 def individuals(body):
     def go(with_param):
         meta_attrs = with_param.get(ReqParamKeys.META)
@@ -252,6 +327,9 @@ def try_and_catch(function, parameter):
         return service_unavailable_message()
     except sqlalchemy_exceptions.SQLAlchemyError:
         log_exception('Exception from SQLAlchemy. Check implementation')
+        return service_unavailable_message()
+    except sqlalchemy_exceptions.OperationalError:
+        log_exception('A user canceled the SQL statement')
         return service_unavailable_message()
     except KeyError:
         log_exception(additional_details=None)

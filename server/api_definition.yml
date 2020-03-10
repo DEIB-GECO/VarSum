@@ -3,69 +3,137 @@ info:
   title: Data summarization 1KG
   description: >
     This API returns summary statistics on user-defined populations and their
-    variants, as the ones identified during the 1000 Genomes Project.
-    For more information visit https%3A%2F%2Fgithub.com%2Ftomalf2%2Fdata_summarization_1KG
+    variants, as the ones identified during the 1000 Genomes Project. For more
+    information visit
+    https%3A%2F%2Fgithub.com%2Ftomalf2%2Fdata_summarization_1KG
   version: 0.1.0
-
 servers:
-  - url: http://api.example.com/
-    description: Optional server description, e.g. Main (production) server
-
+  - url: 'http://api.example.com/'
+    description: 'Optional server description, e.g. Main (production) server'
 paths:
+  /values/{items}:
+    summary: >-
+      The set of values that can be specified
+      in the body request of the other endpoints (mutation excluded)
+    get:
+      summary: Returns the set of values available for the given attribute
+      operationId: api.values
+      parameters:
+        - name: items
+          in: path
+          required: true
+          description: A comma separated list of the attributes for which one wants to know the values.
+          explode: false
+          style: simple
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [assembly, gender, population, super_population, dna_source, mut_type]
+            minItems: 1
+      responses:
+        200:
+          description: >-
+            A JSON object containing an array of valid values for each requested attribute.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attribute:
+                    type: array
+                    items:
+                      type: string
+                  another_attribute:
+                    type: array
+                    items:
+                      type: string
+                example:
+                  gender: ['male', 'female']
+                  dna_source: ['lcl', 'blood']
+
+        400:
+          description: The parameter does not exists.
   /individuals:
     post:
       operationId: api.individuals
       summary: >
-        Returns the distribution of the individuals inside a population of individuals having the
-        requested characteristics.
+        Returns the distribution of the individuals inside a population of having the requested characteristics.
+        If the requested population has any constraint on the regions, then the result includes the distribution
+        of the occurrence and of the frequency of each mutation across different combinations of characteristics
+        among the individuals satisfying the required parameters.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'
-
       responses:
         '200':
-          description: A JSON array with the numerosity of the individuals by groups of attributes.
+          description: >-
+            A JSON object with the numerosity of the individuals by groups of
+            attributes. If the requested population has any constraint on the regions, the individuals are grouped by
+            regions, and the result includes also the occurrence count and the frequency of each mutation across
+            different combinations of characteristics of the population.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
-
+                type: object
+                properties:
+                  columns:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+              examples:
+                Without-Mutations:
+                  value:
+                    columns: ['samples', 'gender', 'population']
+                    rows: [[2, 'male', 'JPT'], [4, 'female', 'ITU']]
+                With-Mutations:
+                  value:
+                    columns: ['chrom', 'start', 'alt', 'samples', 'occurrence', 'frequency', 'gender']
+                    rows: [[1, '10345', 'CCT', 9, 12, 0.666, 'male'], [1, '10360', 'G', 2, 4, 1, 'female']]
   /most_common_mutations:
     post:
       operationId: api.most_common_mutations
-      summary: Returns the most common and the rarest mutations inside the selected population.
+      summary: >-
+        Returns the most common and the rarest mutations inside the selected
+        population.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'
-
       responses:
         '200':
-          description: A JSON array with the numerosity of the selected mutations by groups of attributes.
+          description: >-
+            A JSON array with the numerosity of the selected mutations by groups
+            of attributes.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   type: string
-
   /rarest_mutations:
     post:
       operationId: api.rarest_mutations
-      summary: Returns the most common and the rarest mutations inside the selected population.
+      summary: >-
+        Returns the most common and the rarest mutations inside the selected
+        population.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'
-
       responses:
         '200':
-          description: A JSON array with the numerosity of the selected mutations by groups of attributes.
+          description: >-
+            A JSON array with the numerosity of the selected mutations by groups
+            of attributes.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   type: string
-
-components:  # <- defines reusable components
+components:
   requestBodies:
     input-parameters:
       required: true
@@ -73,7 +141,6 @@ components:  # <- defines reusable components
         application/json:
           schema:
             $ref: '#/components/schemas/input-schema'
-
   schemas:
     schema-mutation-by-id:
       type: object
@@ -84,7 +151,6 @@ components:  # <- defines reusable components
         - id
       example:
         id: rs642251
-
     schema-mutation-by-coordinates:
       type: object
       properties:
@@ -102,66 +168,64 @@ components:  # <- defines reusable components
         chrom: 1
         start: 176541
         alt: C
-
     schema-mutation:
       anyOf:
         - $ref: '#/components/schemas/schema-mutation-by-id'
         - $ref: '#/components/schemas/schema-mutation-by-coordinates'
-
     input-schema:
-        type: object
-        properties:
-          meta:
-            type: object
-            properties:
-              gender:
+      type: object
+      properties:
+        meta:
+          type: object
+          properties:
+            gender:
+              type: string
+            dna_source:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items:
                 type: string
-              dna_source:
-                type: array
-                minItems: 1
-                uniqueItems: true
-                items:
-                  type: string
-              assembly:
+            assembly:
+              type: string
+            population:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items:
                 type: string
-              population_code:
-                type: array
-                minItems: 1
-                uniqueItems: true
-                items:
-                  type: string
-              super_population_code:
-                type: array
-                minItems: 1
-                uniqueItems: true
-                items:
-                  type: string
-              health_status:
+            super_population:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items:
                 type: string
-            required:
-              - assembly
-          variants:
-            type: object
-            minProperties: 1
-            properties:
-              with:
-                type: array
-                minItems: 1
-                uniqueItems: true
-                items:
-                  $ref: '#/components/schemas/schema-mutation'
-              on_same_chrom_copy:
-                type: array
-                minItems: 2
-                uniqueItems: true
-                items:
-                  $ref: '#/components/schemas/schema-mutation'
-              on_diff_chrom_copy:
-                type: array
-                minItems: 2
-                maxItems: 2
-                uniqueItems: true
-                items:
-                  $ref: '#/components/schemas/schema-mutation'
-        required:
-          - meta
+            health_status:
+              type: string
+          required:
+            - assembly
+        variants:
+          type: object
+          minProperties: 1
+          properties:
+            with:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/schema-mutation'
+            on_same_chrom_copy:
+              type: array
+              minItems: 2
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/schema-mutation'
+            on_diff_chrom_copy:
+              type: array
+              minItems: 2
+              maxItems: 2
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/schema-mutation'
+      required:
+        - meta

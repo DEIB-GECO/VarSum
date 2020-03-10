@@ -444,3 +444,21 @@ class DBFunctions:
         if self.log_sql_commands:
             self.show_stmt(stmt, 'RAREST MUTATIONS IN SAMPLE SET')
         return self.connection.execute(stmt)
+
+    # INFORMATIVE QUERIES
+
+    def distinct_values_for(self, attribute_name):
+        region_attributes = self.genomes.columns.keys()
+        meta_attributes = self.metadata.columns.keys()
+        print('regions:', region_attributes)
+        print('meta:', meta_attributes)
+        if attribute_name in meta_attributes:
+            stmt = select([self.metadata.c[attribute_name]]).distinct()
+        elif attribute_name in region_attributes:
+            stmt = select([self.genomes.c[attribute_name]]).distinct()
+        else:
+            raise ValueError('the given attribute {} is not part of the metadata columns nor region columns'.format(attribute_name))
+        if self.log_sql_commands:
+            self.show_stmt(stmt, 'DISTINCT VALUES OF {}'.format(attribute_name))
+        return self.connection.execute(stmt)
+
