@@ -1,0 +1,12 @@
+{'meta': {
+    'health_status': "true",
+    'population': ['ITU'],
+    'gender': 'male',
+    'assembly': 'hg19'
+    },
+ 'variants': {
+     'with': [{'chrom': 1, 'start': 13271, 'alt':'C'}, {'chrom': 1, 'start': 15272, 'alt': 'T'}, {'chrom': 1, 'start': 10176, 'alt': 'C'}]
+ }
+}
+
+8 samples
