@@ -17,7 +17,7 @@ paths:
       in the body request of the other endpoints (mutation excluded)
     get:
       summary: Returns the set of values available for the given attribute
-      operationId: api.values
+      operationId: server.api.values
       parameters:
         - name: items
           in: path
@@ -56,7 +56,7 @@ paths:
           description: The parameter does not exists.
   /individuals:
     post:
-      operationId: api.individuals
+      operationId: server.api.individuals
       summary: >
         Returns the distribution of the individuals inside a population of having the requested characteristics.
         If the requested population has any constraint on the regions, then the result includes the distribution
@@ -97,7 +97,7 @@ paths:
                     rows: [[1, '10345', 'CCT', 9, 12, 0.666, 'male'], [1, '10360', 'G', 2, 4, 1, 'female']]
   /most_common_mutations:
     post:
-      operationId: api.most_common_mutations
+      operationId: server.api.most_common_mutations
       summary: >-
         Returns the most common and the rarest mutations inside the selected
         population.
@@ -116,7 +116,7 @@ paths:
                   type: string
   /rarest_mutations:
     post:
-      operationId: api.rarest_mutations
+      operationId: server.api.rarest_mutations
       summary: >-
         Returns the most common and the rarest mutations inside the selected
         population.

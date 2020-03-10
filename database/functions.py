@@ -146,7 +146,7 @@ class DBFunctions:
         arguments = locals()
         free_dimensions = {key for key in arguments.keys() if arguments[key] is None}
         print('free dimensions', free_dimensions)
-        constrained_dimensions = set(arguments.keys()).difference(free_dimensions).discard('self')
+        constrained_dimensions = set(arguments.keys()).difference(free_dimensions)
         print('constrained dimensions', constrained_dimensions)
         columns_in_select = [self.metadata.c.item_id] + [self.metadata.c[col] for col in free_dimensions]
         query = select(columns_in_select)
@@ -434,7 +434,7 @@ class DBFunctions:
         # defines custom functions
         func_occurrence = (func.sum(self.genomes.c.al1) + func.sum(func.coalesce(self.genomes.c.al2, 0))).label('occurrence')
         func_samples = func.count(self.genomes.c.item_id).label('samples')
-        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples).label('frequency')
+        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples, self.genomes.c.chrom).label('frequency')
 
         stmt = select([self.genomes.c.chrom, self.genomes.c.start, self.genomes.c.alt, func_occurrence, func_samples, func_frequency])\
             .select_from(from_table)\
