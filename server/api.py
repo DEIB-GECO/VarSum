@@ -5,7 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import exc as sqlalchemy_exceptions
 from database.functions import DBFunctions
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 import traceback
 import sys
 
@@ -14,7 +14,9 @@ db_user = sys.argv[1]
 db_password = sys.argv[2]
 output_redirect = sys.stdout
 
-connections_counter = 0
+connections_counter: int = 0    # never decremented
+connections_invalidated: list = list()  # numbers of the connections invalidated
+
 
 class ReqParamKeys:
     META = 'meta'
@@ -37,6 +39,7 @@ flask_app.config['SQLALCHEMY_ECHO'] = False  # echoes SQL statements executed - 
 DB_LOG_STATEMENTS = True
 flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{1}@localhost:15432/gmql_meta_new16_tommaso'.format(db_user, db_password)
 flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # turn off event-driven system of SQLAlchemy reducing overhead
+flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_recycle': 300}  # reset 5 minutes old connections
 # creates SQLAlchemy instance
 sqlalchemy_app = SQLAlchemy(flask_app)
 # configure connection pooling and shared engine objects
@@ -50,9 +53,8 @@ def home():
 
 def values(items):
     # 1st implementation runs a select distinct in the database for every attribute
-    def go(with_param):
+    def go(with_param, db_functions: DBFunctions):
         # input is already whitelisted
-        db_functions = get_and_config_db_functions()
         results = [db_functions.distinct_values_for(item) for item in with_param]
         # put in serializable format
         serializable_results = {}
@@ -69,53 +71,53 @@ def values(items):
 
     distinct_values = {
         'assembly': [
-    'hg19',
-    'GRCh38'
-  ],
+            'hg19',
+            'GRCh38'
+        ],
         'dna_source': [
-    'lcl',
-    # '',
-    'blood'
-  ],
+            'lcl',
+            # '',
+            'blood'
+        ],
         'gender': [
-    'female',
-    'male'
-  ],
+            'female',
+            'male'
+        ],
         'population': [
-    'ITU',
-    'ASW',
-    'ACB',
-    'MXL',
-    'CHB',
-    'GWD',
-    'CLM',
-    'YRI',
-    'PUR',
-    'GIH',
-    'TSI',
-    'BEB',
-    'IBS',
-    'MSL',
-    'PEL',
-    'LWK',
-    'ESN',
-    'PJL',
-    'GBR',
-    'JPT',
-    'STU',
-    'CHS',
-    'KHV',
-    'CEU',
-    'FIN',
-    'CDX'
-  ],
+            'ITU',
+            'ASW',
+            'ACB',
+            'MXL',
+            'CHB',
+            'GWD',
+            'CLM',
+            'YRI',
+            'PUR',
+            'GIH',
+            'TSI',
+            'BEB',
+            'IBS',
+            'MSL',
+            'PEL',
+            'LWK',
+            'ESN',
+            'PJL',
+            'GBR',
+            'JPT',
+            'STU',
+            'CHS',
+            'KHV',
+            'CEU',
+            'FIN',
+            'CDX'
+        ],
         'super_population': [
-    'EAS',
-    'AFR',
-    'EUR',
-    'AMR',
-    'SAS'
-  ],
+            'EAS',
+            'AFR',
+            'EUR',
+            'AMR',
+            'SAS'
+        ],
         'mut_type': ['SNP', 'DEL', 'INS', 'CNV', 'MNP', 'SVA', 'ALU', 'LINE1']
     }
     result = {}
@@ -125,10 +127,9 @@ def values(items):
 
 
 def individuals(body):
-    def go(with_param):
+    def go(with_param, db_functions: DBFunctions):
         meta_attrs = with_param.get(ReqParamKeys.META)
         region_attrs = with_param.get(ReqParamKeys.VARIANTS)
-        db_functions = get_and_config_db_functions()
         # apply filter criteria
         samples_with_meta_attrs_t_name = create_meta_view(db_functions, meta_attrs) or db_functions.default_metadata_table_name
         samples_with_region_attrs_t_name = create_region_table(db_functions, region_attrs)
@@ -147,7 +148,6 @@ def individuals(body):
         marshalled = result_proxy_as_dict(result)
         if samples_with_meta_attrs_t_name is not None:
             db_functions.drop_view(samples_with_meta_attrs_t_name, 'dw')
-        db_functions.disconnect()
         return marshalled
 
     return try_and_catch(go, body)
@@ -155,10 +155,9 @@ def individuals(body):
 
 # ENDPOINT for most-common mutations #TODO change this name
 def most_common_mutations(body):
-    def go(with_param):
+    def go(with_param, db_functions: DBFunctions):
         meta_attrs = with_param.get(ReqParamKeys.META)
         region_attrs = with_param.get(ReqParamKeys.VARIANTS)
-        db_functions = get_and_config_db_functions()
         # apply filter criteria
         samples_with_meta_attrs_t_name = create_meta_view(db_functions,
                                                           meta_attrs) or db_functions.default_metadata_table_name
@@ -168,7 +167,6 @@ def most_common_mutations(body):
                                                             samples_with_region_attrs_t_name,
                                                             'dw')
         marshalled = result_proxy_as_dict(result)
-        db_functions.disconnect()
         return marshalled
 
     return try_and_catch(go, body)
@@ -176,10 +174,9 @@ def most_common_mutations(body):
 
 # ENDPOINT for rarest mutations #TODO change this name
 def rarest_mutations(body):
-    def go(with_param):
+    def go(with_param, db_functions: DBFunctions):
         meta_attrs = with_param.get(ReqParamKeys.META)
         region_attrs = with_param.get(ReqParamKeys.VARIANTS)
-        db_functions = get_and_config_db_functions()
         # apply filter criteria
         samples_with_meta_attrs_t_name = create_meta_view(db_functions,
                                                           meta_attrs) or db_functions.default_metadata_table_name
@@ -189,7 +186,6 @@ def rarest_mutations(body):
                                                        samples_with_region_attrs_t_name,
                                                        'dw')
         marshalled = result_proxy_as_dict(result)
-        db_functions.disconnect()
         return marshalled
 
     return try_and_catch(go, body)
@@ -202,18 +198,32 @@ def result_proxy_as_dict(result_proxy):
         }
 
 
-def get_and_config_db_functions() -> DBFunctions:
+def get_and_config_db_functions(num_attempts: int = 2) -> DBFunctions:
+    global connections_counter
+    global connections_invalidated
+    print('connections: created {} - invalidated '.format(connections_counter), connections_invalidated)
     # get connection from pool
     connection = db_engine.connect().execution_options(autocommit=True)
-    global connections_counter
     if connection.info.get('connections_counter') is None:
         connections_counter += 1
         connection.info['connections_counter'] = connections_counter
     print('got connection with number {} from connection pool'.format(connection.info.get('connections_counter')))
-    db = DBFunctions(connection)
-    if DB_LOG_STATEMENTS:
-        db.log_sql_commands = True
-    return db
+    try:
+        num_attempts -= 1
+        db = DBFunctions(connection)
+        if DB_LOG_STATEMENTS:
+            db.log_sql_commands = True
+        return db
+    except sqlalchemy_exceptions.DatabaseError:  # pooled database connection has been invalidated/restarted
+        print('DB connection # {} has been invalidated/restarted. Pooled connection is being invalidated'
+              .format(connection.info['connections_counter']), file=output_redirect)
+        this_connection_num = connection.info['connections_counter']
+        connection.invalidate()
+        connections_invalidated.append(this_connection_num)
+        # 2nd attempt
+        if num_attempts > 0:
+            print('Refreshing connection...')
+            return get_and_config_db_functions(num_attempts)
 
 
 def create_meta_view(db: DBFunctions, meta_attrs: dict) -> Optional[str]:
@@ -309,7 +319,7 @@ def parse_to_mutation_array(dict_array_of_mutations):
 
 
 def service_unavailable_message():
-    return '503: Service unavailable. Retry later.', 400, {'x-error': 'service unavailable'}
+    return '503: Service unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
 
 
 def bad_request_message():
@@ -318,9 +328,10 @@ def bad_request_message():
 
 def try_and_catch(function, parameter):
     try:
-        return function(parameter)
-    except sqlalchemy_exceptions.DBAPIError:
-        log_exception('Exception from DBAPI. Connection to the database may be not available.')
+        db = get_and_config_db_functions()
+        return function(parameter, db)
+    except sqlalchemy_exceptions.OperationalError:  # database connection not available / user canceled query
+        log_exception('Connection to the database not available or the query has been canceled by the user.')
         return service_unavailable_message()
     except sqlalchemy_exceptions.NoSuchTableError:
         log_exception('Table not found. Check implementation')
@@ -328,14 +339,11 @@ def try_and_catch(function, parameter):
     except sqlalchemy_exceptions.SQLAlchemyError:
         log_exception('Exception from SQLAlchemy. Check implementation')
         return service_unavailable_message()
-    except sqlalchemy_exceptions.OperationalError:
-        log_exception('A user canceled the SQL statement')
-        return service_unavailable_message()
     except KeyError:
         log_exception(additional_details=None)
         return service_unavailable_message()
     except Exception:
-        log_exception(additional_details=None)
+        log_exception("Generic Exception occurred. Look if you can recover from this.")
         return service_unavailable_message()
 
 
