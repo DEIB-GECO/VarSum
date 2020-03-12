@@ -4,8 +4,7 @@ from flask import redirect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import exc as sqlalchemy_exceptions
 from database.functions import DBFunctions
-from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 import traceback
 import sys
 
@@ -44,6 +43,8 @@ flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_recycle': 300}  # reset 5
 sqlalchemy_app = SQLAlchemy(flask_app)
 # configure connection pooling and shared engine objects
 db_engine = sqlalchemy_app.engine
+
+# ###########################       ENDPOINTS
 
 
 @connexion_app.route('/')
@@ -153,7 +154,6 @@ def individuals(body):
     return try_and_catch(go, body)
 
 
-# ENDPOINT for most-common mutations #TODO change this name
 def most_common_mutations(body):
     def go(with_param, db_functions: DBFunctions):
         meta_attrs = with_param.get(ReqParamKeys.META)
@@ -172,7 +172,6 @@ def most_common_mutations(body):
     return try_and_catch(go, body)
 
 
-# ENDPOINT for rarest mutations #TODO change this name
 def rarest_mutations(body):
     def go(with_param, db_functions: DBFunctions):
         meta_attrs = with_param.get(ReqParamKeys.META)
@@ -190,13 +189,7 @@ def rarest_mutations(body):
 
     return try_and_catch(go, body)
 
-
-def result_proxy_as_dict(result_proxy):
-    return {
-            'columns': result_proxy.keys(),
-            'rows': [row.values() for row in result_proxy.fetchall()]
-        }
-
+# ###########################       TRANSFORM INPUT
 
 def get_and_config_db_functions(num_attempts: int = 2) -> DBFunctions:
     global connections_counter
@@ -226,68 +219,14 @@ def get_and_config_db_functions(num_attempts: int = 2) -> DBFunctions:
             return get_and_config_db_functions(num_attempts)
 
 
-def create_meta_view(db: DBFunctions, meta_attrs: dict) -> Optional[str]:
+def parse_to_mutation_array(dict_array_of_mutations):
     """
-    :param db: a DBFunctions
-    :param meta_attrs: the dictionary of metadata attributes the user wants in the sample set
-    :return: Either the name of a view from schema 'dw' describing all the individuals with the required metadata
-    attributes or None when meta_attrs is None.
+    We receive from the user only standard python data structures (generated from the JSON body request parameter).
+    We want to convert each dictionary representing a mutation into a Mutation object.
+    :param dict_array_of_mutations: the array of dictionary elements, each one representing a mutation.
+    :return: an array of Mutation objects.
     """
-    if meta_attrs is None:
-        return None
-    else:
-        new_meta_table_name = 'meta_' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S_%f')
-        db.view_of_samples_with_metadata(new_meta_table_name,
-                                         meta_attrs.get(ReqParamKeys.GENDER),
-                                         meta_attrs.get(ReqParamKeys.HEALTH_STATUS),
-                                         meta_attrs.get(ReqParamKeys.DNA_SOURCE),
-                                         meta_attrs.get(ReqParamKeys.ASSEMBLY),
-                                         meta_attrs.get(ReqParamKeys.POPULATION_CODE),
-                                         meta_attrs.get(ReqParamKeys.SUPER_POPULATION_CODE))
-        return new_meta_table_name
-
-
-def create_region_table(db: DBFunctions, region_attrs: dict) -> Optional[str]:
-    """
-    :param db: an insatnce of DBFunctions
-    :param region_attrs: the dictionary of the properties that the variants in the sample set must have
-    :return: Either the name of the table containing the individuals (+ the given regions) or None when region_attrs is
-    None or empty.
-    """
-    if region_attrs is None:
-        return None
-    else:
-        # compute each filter on regions separately
-        partial_result_table_names = list()
-        if region_attrs.get(ReqParamKeys.WITH_VARIANTS):
-            table_name = db.random_t_name_w_prefix('region_with')
-            db.table_with_all_of_mutations(table_name,
-                                           'dw',
-                                           *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARIANTS]))
-            partial_result_table_names.append(table_name)
-        if region_attrs.get(ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY):
-            table_name = db.random_t_name_w_prefix('region_same_chrom_copy')
-            db.table_mutations_on_same_chrom_copy(table_name,
-                                                  'dw',
-                                                  *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY]))
-            partial_result_table_names.append(table_name)
-        if region_attrs.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY):
-            table_name = db.random_t_name_w_prefix('region_diff_chrom_copy')
-            db.table_mutations_on_different_chrom_copies(table_name,
-                                                         'dw',
-                                                         *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY]))
-            partial_result_table_names.append(table_name)
-        if len(partial_result_table_names) == 0:    # when no filter on regions is applied
-            return None
-        elif len(partial_result_table_names) == 1:  # when only one filter kind
-            return partial_result_table_names[0]
-        else:                                       # put together all filters in AND
-            intersection_t_name = db.random_t_name_w_prefix('intersect')
-            db.take_regions_of_common_individuals(intersection_t_name,
-                                                  'dw',
-                                                  partial_result_table_names,
-                                                  ['dw'] * len(partial_result_table_names))
-            return intersection_t_name
+    return [mutation_adt.from_dict(a_dict) for a_dict in dict_array_of_mutations]
 
 
 def are_mutations_unique_between_filter_groups(regions: dict) -> bool:
@@ -308,23 +247,79 @@ def are_mutations_unique_between_filter_groups(regions: dict) -> bool:
     return True
 
 
-def parse_to_mutation_array(dict_array_of_mutations):
+def create_meta_view(db: DBFunctions, meta_attrs: dict) -> Optional[str]:
     """
-    We receive from the user only standard python data structures (generated from the JSON body request parameter).
-    We want to convert each dictionary representing a mutation into a Mutation object.
-    :param dict_array_of_mutations: the array of dictionary elements, each one representing a mutation.
-    :return: an array of Mutation objects.
+    :param db: a DBFunctions
+    :param meta_attrs: the dictionary of metadata attributes the user wants in the sample set
+    :return: Either the name of a view from schema 'dw' describing all the individuals with the required metadata
+    attributes or None when meta_attrs is None.
     """
-    return [mutation_adt.from_dict(a_dict) for a_dict in dict_array_of_mutations]
+    if meta_attrs is None:
+        return None
+    else:
+        new_meta_table_name = db.random_t_name_w_prefix('meta')
+        db.view_of_samples_with_metadata(new_meta_table_name,
+                                         meta_attrs.get(ReqParamKeys.GENDER),
+                                         meta_attrs.get(ReqParamKeys.HEALTH_STATUS),
+                                         meta_attrs.get(ReqParamKeys.DNA_SOURCE),
+                                         meta_attrs.get(ReqParamKeys.ASSEMBLY),
+                                         meta_attrs.get(ReqParamKeys.POPULATION_CODE),
+                                         meta_attrs.get(ReqParamKeys.SUPER_POPULATION_CODE))
+        return new_meta_table_name
 
 
-def service_unavailable_message():
-    return '503: Service unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
+def create_region_table(db: DBFunctions, region_attrs: dict) -> Optional[str]:
+    """
+    :param db: an instance of DBFunctions
+    :param region_attrs: the dictionary of the properties that the variants in the sample set must have
+    :return: Either the name of the table containing the individuals (+ the given regions) or None when region_attrs is
+    None or empty.
+    """
+    if region_attrs is None:
+        return None
+    else:
+        # compute each filter on regions separately
+        to_combine_t_names = list()
+        if region_attrs.get(ReqParamKeys.WITH_VARIANTS):
+            table_name = db.random_t_name_w_prefix('region_with')
+            db.table_with_all_of_mutations(table_name,
+                                           'dw',
+                                           *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARIANTS]))
+            to_combine_t_names.append(table_name)
+        if region_attrs.get(ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY):
+            table_name = db.random_t_name_w_prefix('region_same_chrom_copy')
+            db.table_mutations_on_same_chrom_copy(table_name,
+                                                  'dw',
+                                                  *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY]))
+            to_combine_t_names.append(table_name)
+        if region_attrs.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY):
+            table_name = db.random_t_name_w_prefix('region_diff_chrom_copy')
+            db.table_mutations_on_different_chrom_copies(table_name,
+                                                         'dw',
+                                                         *parse_to_mutation_array(region_attrs[ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY]))
+            to_combine_t_names.append(table_name)
+        if len(to_combine_t_names) == 0:    # when no filter on regions is applied
+            return None
+        elif len(to_combine_t_names) == 1:  # when only one filter kind
+            return to_combine_t_names[0]
+        else:                                       # put together all filters in AND
+            intersection_t_name = db.random_t_name_w_prefix('intersect')
+            db.take_regions_of_common_individuals(intersection_t_name,
+                                                  'dw',
+                                                  to_combine_t_names,
+                                                  ['dw'] * len(to_combine_t_names))
+            return intersection_t_name
+
+# ###########################       TRANSFORM OUTPUT
 
 
-def bad_request_message():
-    return '400: Cannot answer to this request.', 400, {'x-error': 'Cannot answer to this request'}
+def result_proxy_as_dict(result_proxy):
+    return {
+            'columns': result_proxy.keys(),
+            'rows': [row.values() for row in result_proxy.fetchall()]
+        }
 
+# ###########################       ERROR HANDLING
 
 def try_and_catch(function, parameter):
     try:
@@ -351,6 +346,14 @@ def log_exception(additional_details: Optional[str]):
     if additional_details is not None:
         print(additional_details, file=output_redirect)
     traceback.print_exc(file=output_redirect)
+
+
+def service_unavailable_message():
+    return '503: Service unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
+
+
+def bad_request_message():
+    return '400: Cannot answer to this request.', 400, {'x-error': 'Cannot answer to this request'}
 
 
 # do this only after the declaration of the api endpoint handlers
