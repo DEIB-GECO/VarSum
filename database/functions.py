@@ -112,7 +112,7 @@ class DBFunctions:
         return query
 
     @staticmethod
-    def _stmt_where_region_is_any_of_mutations(*mutations: Mutation, from_table: str, select_expression):
+    def _stmt_where_region_is_any_of_mutations(*mutations: Mutation, from_table, select_expression):
         """
         :param mutations:
         :param from_table:
@@ -193,7 +193,7 @@ class DBFunctions:
         """
         Generates a table containing the given mutations, and only from the individuals that own all the given mutations.
         :param into_schema: schema where to generate the result table
-        :param generated_region_table_name: a name, unique for each call, which is the name of the
+        :param generated_region_table_name: the name of the table to create as a container for the result of this operation.
         :param mutations: a list of Mutations
         """
         if len(mutations) == 0:
@@ -206,7 +206,7 @@ class DBFunctions:
                 self.show_stmt(stmt_create_table, 'INDIVIDUALS HAVING THE MUTATION')
             self.connection.execute(stmt_create_table)
         else:
-            union_table_name = 'intermediate_' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S_%f')
+            union_table_name = self.random_t_name_w_prefix('intermediate')
             self._table_with_any_of_mutations(union_table_name, into_schema, *mutations)
             union_table = Table(union_table_name, self.db_meta, autoload=True, autoload_with=self.connection, schema=into_schema)
             # extracts only the samples having all the mutations
@@ -235,10 +235,9 @@ class DBFunctions:
         :param mutation1: a Mutation instance.
         :param mutation2: a Mutation instance.
         """
-        regions_having_all_mutations_table = self.genomes
         # selects only the mutations to be on the different chromosome copies (this set will be used two times) from all individuals
         # we will enforce the presence of the mutations in all the individuals later...
-        intermediate_table_name = 'intermediate_' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S_%f')
+        intermediate_table_name = self.random_t_name_w_prefix('intermediate')
         self._table_with_any_of_mutations(intermediate_table_name, into_schema, mutation1, mutation2)
         intermediate_table = Table(intermediate_table_name, self.db_meta, autoload=True, autoload_with=self.connection,
                                    schema=into_schema)
@@ -271,10 +270,9 @@ class DBFunctions:
         """
         if len(mutations) < 2:
             raise ValueError('You must provide at least two Mutation instances in order to use this method.')
-        regions_having_all_mutations_table = self.genomes
         # selects only the mutations to be on the same chromosome copies (this set will be used two times) from all individuals
         # we will enforce the presence of all the given mutations in all the individuals later...
-        intermediate_table_name = 'intermediate_' + datetime.now().strftime('_%Y_%m_%d_%H_%M_%S_%f')
+        intermediate_table_name = self.random_t_name_w_prefix('intermediate')
         self._table_with_any_of_mutations(intermediate_table_name, into_schema, *mutations)
         intermediate_table = Table(intermediate_table_name, self.db_meta, autoload=True, autoload_with=self.connection, schema=into_schema)
 
@@ -296,6 +294,23 @@ class DBFunctions:
         if self.log_sql_commands:
             print('DROP TABLE '+intermediate_table_name)
         intermediate_table.drop(self.connection)
+
+    def view_of_mutations_in_interval_or_type(self, generated_region_view_name: str, into_schema: str,
+                                              chrom: Optional[int], left_end: Optional[int], right_end: Optional[int],
+                                              mut_type: Optional[list]):
+        if chrom is None and left_end is None and right_end is None and mut_type is None:
+            raise ValueError('you called this method without giving any selection criteria')
+        stmt_as = select([self.genomes])
+        if chrom is not None and left_end is not None and right_end is not None:
+            stmt_as = stmt_as.where((self.genomes.c.chrom == chrom) &
+                                    (self.genomes.c.start >= left_end) &
+                                    (self.genomes.c.stop <= right_end))
+        if mut_type is not None:
+            stmt_as = stmt_as.where(self.genomes.c.mut_type.in_(mut_type))
+        stmt = self.stmt_create_view_as(generated_region_view_name, stmt_as, into_schema)
+        if self.log_sql_commands:
+            self.show_stmt(stmt, 'VIEW OF REGIONS IN INTERVAL {}:{}-{} of types {}'.format(chrom, left_end, right_end, mut_type))
+        self.connection.execute(stmt)
 
     # takes individuals (+ their mutations) appearing in all source tables
     def take_regions_of_common_individuals(self, generated_table_name: str, into_schema: str, table_names: list, from_schema: list):

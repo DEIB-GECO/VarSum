@@ -63,6 +63,14 @@ samples_having_mut_on_different_chrom_copy_name = 'insert name here'
 # db.print_table_named(regions_from_common_item_id_name, 'dw')
 regions_from_common_item_id_name = 'regions_common_item_id_2020_03_05_03_26_01'
 
+regions_from_common_item_id_name = db.random_t_name_w_prefix('i')
+db.take_regions_of_common_individuals(regions_from_common_item_id_name, 'dw',
+                                      ['a',
+                                       'b',
+                                       'c'],
+                                      ['dw', 'dw', 'dw'])
+
+
 
 # COUNT OF SAMPLES BY DIMENSION
 # count_result = db.count_samples_by_dimensions(view_of_samples_name, regions_from_common_item_id_name, 'dw')
@@ -73,6 +81,13 @@ regions_from_common_item_id_name = 'regions_common_item_id_2020_03_05_03_26_01'
 # freq_result = db.mutation_frequency_by_dimensions(view_of_samples_name, regions_from_common_item_id_name, 'dw')
 # print('row count {}'.format(freq_result.rowcount))
 # db.print_query_result(freq_result)
+
+
+# MUTATIONS IN REGION
+# regions_in_interval_t_name = db.random_t_name_w_prefix('mut_in_intrv')
+# db.view_of_mutations_in_interval_or_type(regions_in_interval_t_name, 'dw', 1, 0, 10176, None)
+# db.view_of_mutations_in_interval_or_type(regions_in_interval_t_name, 'dw', None, None, None, mut_type=['SNP', 'CNV'])
+# db.view_of_mutations_in_interval_or_type(regions_in_interval_t_name, 'dw', 1, 0, 10176, mut_type=['SNP', 'CNV', 'INS'])
 
 
 if db is not None:
