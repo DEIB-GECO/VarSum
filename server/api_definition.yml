@@ -17,7 +17,7 @@ paths:
       in the body request of the other endpoints (mutation excluded)
     get:
       summary: Returns the set of values available for the given attribute
-      operationId: server.api.values
+      operationId: server.api_8.values
       parameters:
         - name: items
           in: path
@@ -54,14 +54,11 @@ paths:
 
         400:
           description: The parameter does not exists.
-  /individuals:
+  /samples_distribution:
     post:
-      operationId: server.api.individuals
+      operationId: server.api_8.samples_distribution
       summary: >
-        Returns the distribution of the individuals inside a population of having the requested characteristics.
-        If the requested population has any constraint on the regions, then the result includes the distribution
-        of the occurrence and of the frequency of each mutation across different combinations of characteristics
-        among the individuals satisfying the required parameters.
+        Returns the distribution of the individuals inside a population having the requested characteristics.
       requestBody:
         $ref: '#/components/requestBodies/input-parameters'
       responses:
@@ -86,18 +83,86 @@ paths:
                       type: array
                       items:
                         type: string
-              examples:
-                Without-Mutations:
-                  value:
-                    columns: ['samples', 'gender', 'population']
-                    rows: [[2, 'male', 'JPT'], [4, 'female', 'ITU']]
-                With-Mutations:
-                  value:
-                    columns: ['chrom', 'start', 'alt', 'samples', 'occurrence', 'frequency', 'gender']
-                    rows: [[1, '10345', 'CCT', 9, 12, 0.666, 'male'], [1, '10360', 'G', 2, 4, 1, 'female']]
+              example:
+                columns: ['samples', 'gender', 'population']
+                rows: [[2, 'male', 'JPT'], [4, 'female', 'ITU']]
+  /variant_distribution:
+    post:
+      operationId: server.api_8.variant_distribution
+      summary: >
+        Returns the distribution of a variant inside a population having the requested characteristics.
+      requestBody:
+        $ref: '#/components/requestBodies/input-parameters'
+      parameters:
+        - in: query
+          name: chrom
+          schema:
+            type: integer
+          description: >-
+            The chromosome of the variant for which the distribution is requested. If present, also the
+            parameters "start" and "alt" must be specified.
+        - in: query
+          name: start
+          schema:
+            type: integer
+            description: >-
+              The starting position in 0-based coordinates of the variant for which the distribution is requested.
+              If present, also the parameters "chrom" and "alt" must be specified.
+          required: false
+        - in: query
+          name: alt
+          schema:
+            type: string
+            description: >-
+              The alternative allele of the variant for the distribution si requested. If present, also the
+              parameters "start" and "alt" must be specified.
+          required: false
+        - in: query
+          name: id
+          schema:
+            type: string
+            description: >-
+              The id of the variant for which the distribution is requested. When present, it substitutes the parameters "chrom", "start" and "alt".
+        - name: by
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [gender, population, super_population, dna_source]
+            minItems: 1
+            description: >-
+              The id of the variant for which the distribution is requested. When present, it substitutes the parameters
+              "chrom", "start" and "alt".
+      responses:
+        '200':
+          description: >-
+            A JSON object with the numerosity of the individuals by groups of
+            attributes. If the requested population has any constraint on the regions, the individuals are grouped by
+            regions, and the result includes also the occurrence count and the frequency of each mutation across
+            different combinations of characteristics of the population.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columns:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+              example:
+                columns: ['chrom', 'start', 'alt', 'samples', 'occurrence', 'frequency', 'gender']
+                rows: [[1, '10345', 'CCT', 9, 12, 0.666, 'male'], [1, '10360', 'G', 2, 4, 1, 'female']]
   /most_common_mutations:
     post:
-      operationId: server.api.most_common_mutations
+      operationId: server.api_8.most_common_mutations
       summary: >-
         Returns the most common and the rarest mutations inside the selected
         population.
@@ -116,7 +181,7 @@ paths:
                   type: string
   /rarest_mutations:
     post:
-      operationId: server.api.rarest_mutations
+      operationId: server.api_8.rarest_mutations
       summary: >-
         Returns the most common and the rarest mutations inside the selected
         population.
