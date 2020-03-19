@@ -487,16 +487,17 @@ class DBFunctions:
         func_occurrence = (func.sum(self.genomes.c.al1) + func.sum(func.coalesce(self.genomes.c.al2, 0))).label('occurrence')
         func_samples = func.count(self.genomes.c.item_id).label('samples')
         func_frequency = func.rr.mut_frequency(func_occurrence, func_samples, self._get_chrom_of_variant(variant)).label('frequency')
-
-        distribute_by_columns = [self.metadata.c[col_name] for col_name in by_attributes]
-        stmt = select([func_occurrence, func_samples, func_frequency] + distribute_by_columns)
+        #TODO fix frequency: occurrence / numerosity of sample set * ploidy
+        columns_in_select = [self.metadata.c[col_name] for col_name in by_attributes]
+        
+        stmt = select([func_occurrence, func_samples, func_frequency] + columns_in_select)
         stmt = self._stmt_where_region_is_any_of_mutations(variant,
                                                            from_table=self.genomes,
                                                            select_expression=stmt,
                                                            only_item_id_in_table=sample_set)
         stmt = stmt\
             .where(self.metadata.c.item_id == self.genomes.c.item_id)\
-            .group_by(func.cube(*distribute_by_columns))
+            .group_by(func.cube(*columns_in_select))
         if self.log_sql_commands:
             self.show_stmt(stmt, 'QUERY MUT FREQUENCY WITH CUBE ON FREE DIMENSIONS')
         return self.connection.execute(stmt)
