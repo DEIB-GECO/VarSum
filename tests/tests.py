@@ -1,18 +1,14 @@
-from database.db_entities import *
-from database.functions import DBFunctions
-from sqlalchemy import create_engine
-from mutation_adt import Mutation
-import sys
+from data_sources.io_parameters import *
+import data_sources.coordinator as coordinator
+from typing import Optional
 
-db_user = sys.argv[1]
-db_password = sys.argv[2]
-db = None
 
 if __name__ == '__main__':
-    engine = create_engine('postgresql://{0}:{1}@localhost:15432/gmql_meta_new16_tommaso'.format(db_user, db_password))
-    connection = engine.connect().execution_options(autocommit=True)
-    db = DBFunctions(engine.connect())
-    db.log_sql_commands = True
+    import database.database as database
+    import sys
+    db_user = sys.argv[1]
+    db_password = sys.argv[2]
+    database.config_db_engine_for_tests(db_user, db_password)
 
 # these two are on different chromosome copies
 mut1 = Mutation(_id='rs367896724')
@@ -24,21 +20,28 @@ mut3_fingerprint = Mutation(1, 10176, 'C')
 mut4_al1 = Mutation(_id='rs376342519')
 mut4_fingerprint = Mutation(1, 10615, '')
 
-meta1 = MetadataAttrs(gender=None,
-                      health_status='true',
-                      dna_source=None,
-                      assembly='hg19',
-                      population=None,
-                      super_population=['SAS'])
+hg19_healthy_SAS = MetadataAttrs(gender=None,
+                                 health_status='true',
+                                 dna_source=None,
+                                 assembly='hg19',
+                                 population=None,
+                                 super_population=['SAS'])
+hg19_healthy_female_BEB = MetadataAttrs(gender='female',
+                                        health_status='true',
+                                        dna_source=None,
+                                        assembly='hg19',
+                                        population=['BEB'],
+                                        super_population=None)
+something_else = MetadataAttrs(something_else='bla')
 
 # FILTER BY METADATA
-# db.meta_attrs = meta1
+# db.meta_attrs = hg19_healthy_SAS
 # db.create_table_of_meta()
 # db.print_table(db.my_meta_t)
 
 
 # HAVING MUTATIONS 3 AND 4
-# db.meta_attrs = meta1
+# db.meta_attrs = hg19_healthy_SAS
 # db.region_attrs = RegionAttrs(
 #     [mut3_al1, mut4_al1],
 #     None,
@@ -70,7 +73,7 @@ meta1 = MetadataAttrs(gender=None,
 
 
 # MAKES AND OF CHARACTERISTICS BY INDIVIDUAL
-# db.meta_attrs = meta1
+# db.meta_attrs = hg19_healthy_SAS
 # db.region_attrs = RegionAttrs(
 #     [mut4_al1],
 #     None,
@@ -82,7 +85,7 @@ meta1 = MetadataAttrs(gender=None,
 
 
 # MUTATION FREQUENCY BY DIMENSION
-# db.meta_attrs = meta1
+# db.meta_attrs = hg19_healthy_SAS
 # db.region_attrs = RegionAttrs(
 #     None,
 #     None,
@@ -138,5 +141,30 @@ meta1 = MetadataAttrs(gender=None,
 # db.view_of_mutations_in_interval_or_type(regions_in_interval_t_name, 'dw', 1, 0, 10176, mut_type=['SNP', 'CNV', 'INS'])
 
 
-if db is not None:
-    db.disconnect()
+# meta = io_param.MetadataAttrs(gender='a', health_status='a', dna_source=['a'], assembly='a', population=['a'], super_population=['a'])
+# region = io_param.RegionAttrs(with_variants=['a'], with_variants_same_c_copy=['a'], with_variants_diff_c_copy=['a'])
+
+by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
+# import data_sources.kgenomes.kgenomes as kgenomes
+# import database.database as database
+# import database.db_utils as db_utils
+#
+# source = kgenomes.KGenomes()
+#
+#
+# def tr(connection):
+#     stmt = source.most_common_mut_in_sample_set(connection, hg19_healthy_female_BEB, RegionAttrs([mut4_al1], None, [mut1, mut2_fingerprint]))
+#     # result = connection.execute(stmt)
+#     # db_utils.print_query_result(result)
+#
+#
+# database.try_py_function(tr)
+
+# result_proxy = coordinator.donor_distribution(by_attributes, hg19_healthy_female_BEB, None)
+# result_proxy = coordinator.variant_distribution(by_attributes, hg19_healthy_female_BEB, RegionAttrs([mut1], None, None), mut2)
+# result_proxy = coordinator.most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
+print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
+print(coordinator.values_of_attribute(Vocabulary.GENDER))
+print(coordinator.values_of_attribute(Vocabulary.POPULATION))
+print(coordinator.values_of_attribute(Vocabulary.SUPER_POPULATION))
+print(coordinator.values_of_attribute(Vocabulary.DNA_SOURCE))
