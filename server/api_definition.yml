@@ -34,19 +34,16 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  attribute:
-                    type: array
-                    items:
-                      type: string
-                  another_attribute:
-                    type: array
-                    items:
-                      type: string
-                example:
-                  gender: ['male', 'female']
-                  dna_source: ['lcl', 'blood']
+                type: array
+                items:
+                  type: string
+              examples:
+                gender:
+                  value:
+                    ['male', 'female']
+                dna_source:
+                  value:
+                    ['lcl', 'blood']
         '400':
           description: The parameter does not exists.
         '503':
