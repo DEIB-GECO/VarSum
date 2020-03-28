@@ -68,7 +68,7 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
         stmt = \
             select(
                 by_attributes_as_columns +
-                [func.count(column(Vocabulary.DONOR_ID.name))]
+                [func.count(column(Vocabulary.DONOR_ID.name)).label('DONORS')]
             )\
             .select_from(union(*from_sources).alias("all_sources"))\
             .group_by(func.cube(*by_attributes_as_columns))
@@ -132,12 +132,14 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
     else:
         by_attributes_as_columns = [column(att.name) for att in by_attributes]
 
-        func_count_donors = func.count(column(Vocabulary.DONOR_ID.name)).label(Vocabulary.COUNT.name)
-        func_count_occurrence = func.sum(column(Vocabulary.OCCURRENCE.name)).label(Vocabulary.OCCURRENCE.name)
+        func_count_donors = func.count(column(Vocabulary.DONOR_ID.name)).label('POPULATION_SIZE')
+        func_count_positive_donors = func.count(1).filter(column(Vocabulary.OCCURRENCE.name) > 0).label('POSITIVE_DONORS')
+        func_count_occurrence = func.sum(column(Vocabulary.OCCURRENCE.name)).label('OCCURRENCE_OF_TARGET_VARIANT')
         func_frequency = func.rr.mut_frequency(func_count_occurrence, func_count_donors, chromosome).label(Vocabulary.FREQUENCY.name)
 
+        # merge results by union (which removes duplicates) and count
         stmt = \
-            select(by_attributes_as_columns + [func_count_donors, func_count_occurrence, func_frequency]) \
+            select(by_attributes_as_columns + [func_count_donors, func_count_positive_donors, func_count_occurrence, func_frequency]) \
             .select_from(union(*from_sources).alias('all_sources')) \
             .group_by(func.cube(*by_attributes_as_columns))
 
@@ -200,7 +202,7 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -
 
         return database.try_py_function(compute_result)
 
-
+# TODO CHANGE NAME IN LEAST_RARE
 def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Optional[ResultProxy]:
     eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs)]
 

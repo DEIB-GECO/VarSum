@@ -1,6 +1,7 @@
 from data_sources.io_parameters import *
 import data_sources.coordinator as coordinator
 from typing import Optional
+import database.db_utils as db_utils
 
 
 if __name__ == '__main__':
@@ -147,7 +148,6 @@ something_else = MetadataAttrs(something_else='bla')
 by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
 # import data_sources.kgenomes.kgenomes as kgenomes
 # import database.database as database
-# import database.db_utils as db_utils
 #
 # source = kgenomes.KGenomes()
 #
@@ -161,10 +161,11 @@ by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
 # database.try_py_function(tr)
 
 # result_proxy = coordinator.donor_distribution(by_attributes, hg19_healthy_female_BEB, None)
+# result_proxy = coordinator.donor_distribution([Vocabulary.SUPER_POPULATION], MetadataAttrs(assembly='hg19', super_population=['AFR', 'SAS']), None)
+
 # result_proxy = coordinator.variant_distribution(by_attributes, hg19_healthy_female_BEB, RegionAttrs([mut1], None, None), mut2)
+# result_proxy = coordinator.variant_distribution(by_attributes, hg19_healthy_female_BEB, None, mut1)
+# db_utils.print_query_result(result_proxy)
 # result_proxy = coordinator.most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
-print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
-print(coordinator.values_of_attribute(Vocabulary.GENDER))
-print(coordinator.values_of_attribute(Vocabulary.POPULATION))
-print(coordinator.values_of_attribute(Vocabulary.SUPER_POPULATION))
-print(coordinator.values_of_attribute(Vocabulary.DNA_SOURCE))
+# print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
+
