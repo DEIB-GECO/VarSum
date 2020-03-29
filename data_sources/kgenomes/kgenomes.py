@@ -1,13 +1,12 @@
 from typing import List
 from ..source_interface import *
 from ..io_parameters import *
-from sqlalchemy import MetaData, Table, text, engine, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, subquery
-from sqlalchemy.sql.expression import FromClause, Selectable
-from sqlalchemy.engine import ResultProxy, Connection
+from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types
+from sqlalchemy.sql.expression import Selectable
+from sqlalchemy.engine import Connection
 from functools import reduce
 import database.db_utils as utils
 import database.database as database
-import time
 from threading import RLock
 from loguru import logger
 
@@ -75,7 +74,7 @@ class KGenomes(Source):
                 select([self.my_region_t.c.item_id]).distinct()
             ))
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, 'KGENOMES: STMT DONORS WITH REQUIRED ATTRIBUTES')
+            utils.show_stmt(self.connection, stmt, logger.debug, 'KGENOMES: STMT DONORS WITH REQUIRED ATTRIBUTES')
 
         # utils.create_table_as(utils.random_t_name_w_prefix('d_distr'), stmt, default_schema_to_use_name, connection, False)
         return stmt
@@ -122,10 +121,10 @@ class KGenomes(Source):
                                                    stmt_sample_set.c.item_id == stmt_samples_w_var.c.item_id))
         # TODO test what happens if sample set is empty and it is anyway used in the left join statement
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, 'KGENOMES: STMT VARIANT OCCURRENCE')
+            utils.show_stmt(connection, stmt, logger.debug, 'KGENOMES: STMT VARIANT OCCURRENCE')
         return stmt
 
-    def most_common_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
+    def most_common_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq, limit_result):
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
@@ -138,38 +137,56 @@ class KGenomes(Source):
                 'Please specify some region constraint.')
 
         # compute sample set. Actually, self.my_region_t already contains only the individuals compatible with meta_attrs,
-        # however we can ease the future operations by removing duplicates.
-        sample_set = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))\
-            .limit(2)\
-            .alias('sample_set')
-        # TODO REMOVE LIMIT 2
-        # sample_size = connection.execute(select([func.count()]).select_from(sample_set)).fetchone().values()[0] # TODO replace inside func_frequency
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         SAMPLE SET LIMITED TO 2 INDIVIDUALS     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        # however we can ease the future operations by removing duplicates. HAVE TO MATCH sample_set_with_limit
+        sample_set = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))
+
         # reduce size of join with genomes table
         genomes_red = select(
-            [genomes.c.item_id, genomes.c.chrom, genomes.c.start, genomes.c.alt, genomes.c.al1, genomes.c.al2]).alias('genomes_few_columns')
+            [genomes.c.item_id, genomes.c.chrom, genomes.c.start, genomes.c.ref, genomes.c.alt, genomes.c.al1, genomes.c.al2]).alias('genomes_few_columns')
 
         # defines custom functions
+        population_size = connection.execute(select([func.count().distinct()]).select_from(sample_set.alias())).fetchone().values()[0]
         func_occurrence = (func.sum(genomes_red.c.al1) + func.sum(func.coalesce(genomes_red.c.al2, 0))).label(Vocabulary.OCCURRENCE.name)
-        func_samples = func.count(genomes_red.c.item_id).label(Vocabulary.COUNT.name)
-        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples, genomes_red.c.chrom).label(Vocabulary.FREQUENCY.name)
+        func_positive_donors = func.count(genomes_red.c.item_id).label(Vocabulary.POSITIVE_DONORS.name)
+        func_frequency = func.rr.mut_frequency(func_occurrence, population_size, genomes_red.c.chrom).label(Vocabulary.FREQUENCY.name)
+
+        # I know it doesn't make sense LIMIT(population_size). But this + SET enable_seqscan=false can force the DB
+        # engine to use the index. SET enable_seqscan=false alone is not enough :(
+        sample_set_with_limit = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id])) \
+            .limit(population_size) \
+            .alias('sample_set')
 
         stmt = select([genomes_red.c.chrom.label(Vocabulary.CHROM.name),
                        genomes_red.c.start.label(Vocabulary.START.name),
+                       genomes_red.c.ref.label(Vocabulary.REF.name),
                        genomes_red.c.alt.label(Vocabulary.ALT.name),
+                       cast(literal(population_size), types.Integer).label(Vocabulary.POPULATION_SIZE.name),
                        func_occurrence,
-                       func_samples,
+                       func_positive_donors,
                        func_frequency]) \
-            .select_from(genomes_red.join(sample_set, genomes_red.c.item_id == sample_set.c.item_id)) \
-            .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.alt) \
-            .order_by(desc(func_frequency), desc(func_occurrence)) \
-            .limit(10)
+            .select_from(genomes_red.join(
+                sample_set_with_limit,
+                genomes_red.c.item_id == sample_set_with_limit.c.item_id)) \
+            .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt)
+        if out_max_freq is not None:
+            stmt = stmt.having(func_frequency <= out_max_freq)
+        stmt = stmt.order_by(desc(func_frequency), desc(func_occurrence))\
+            .limit(limit_result)
 
+        logger.debug(f'KGenomes: request most_common_variants/ for a population of {population_size} individuals')
+
+        # create result table
+        if population_size <= 333:
+            connection.execute('SET SESSION enable_seqscan=false')  # this + LIMIT force use the index on genomes table up to 149 individuals
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, 'KGenomes: MOST FREQUENT MUTATIONS IN SAMPLE SET')
-        return stmt
+            logger.debug('KGenomes: MOST FREQUENT MUTATIONS IN SAMPLE SET')
+        t_name = utils.random_t_name_w_prefix('most_common')
+        utils.create_table_as(t_name, stmt, default_schema_to_use_name, connection, self.log_sql_commands, logger.debug)
+        result = Table(t_name, db_meta, autoload=True, autoload_with=connection, schema=default_schema_to_use_name)
+        connection.invalidate()  # do not recycle this connection (instead of setting seqscan=true)
+        return result
 
-    def rarest_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
+    def rarest_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq, limit_result):
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
@@ -182,46 +199,63 @@ class KGenomes(Source):
                 'Please specify some region constraint.')
 
         # compute sample set. Actually, self.my_region_t already contains only the individuals compatible with meta_attrs,
-        # however we can ease the future operations by removing duplicates.
-        sample_set = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))\
-            .limit(2)\
-            .alias('sample_set')
-        # TODO REMOVE LIMIT 2
-        # sample_size = connection.execute(select([func.count()]).select_from(sample_set)).fetchone().values()[0] # TODO replace inside func_frequency
-        print(
-            '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         SAMPLE SET LIMITED TO 2 INDIVIDUALS     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        # however we can ease the future operations by removing duplicates. HAVE TO MATCH sample_set_with_limit
+        sample_set = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))
+
         # reduce size of join with genomes table
         genomes_red = select(
-            [genomes.c.item_id, genomes.c.chrom, genomes.c.start, genomes.c.alt, genomes.c.al1, genomes.c.al2]).alias(
+            [genomes.c.item_id, genomes.c.chrom, genomes.c.start, genomes.c.ref, genomes.c.alt, genomes.c.al1, genomes.c.al2]).alias(
             'genomes_few_columns')
 
         # defines custom functions
+        population_size = connection.execute(select([func.count().distinct()]).select_from(sample_set.alias())).fetchone().values()[0]
         func_occurrence = (func.sum(genomes_red.c.al1) + func.sum(func.coalesce(genomes_red.c.al2, 0))).label(Vocabulary.OCCURRENCE.name)
-        func_samples = func.count(genomes_red.c.item_id).label(Vocabulary.COUNT.name)
-        func_frequency = func.rr.mut_frequency(func_occurrence, func_samples, genomes_red.c.chrom).label(Vocabulary.FREQUENCY.name)
+        func_positive_donors = func.count(genomes_red.c.item_id).label(Vocabulary.POSITIVE_DONORS.name)
+        func_frequency = func.rr.mut_frequency(func_occurrence, population_size, genomes_red.c.chrom).label(Vocabulary.FREQUENCY.name)
+
+        # I know it doesn't make sense LIMIT(population_size). But this + SET enable_seqscan=false can force the DB
+        # engine to use the index. SET enable_seqscan=false alone is not enough :(
+        sample_set_with_limit = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id])) \
+            .limit(population_size) \
+            .alias('sample_set')
 
         stmt = select([genomes_red.c.chrom.label(Vocabulary.CHROM.name),
                        genomes_red.c.start.label(Vocabulary.START.name),
+                       genomes_red.c.ref.label(Vocabulary.REF.name),
                        genomes_red.c.alt.label(Vocabulary.ALT.name),
+                       cast(literal(population_size), types.Integer).label(Vocabulary.POPULATION_SIZE.name),
                        func_occurrence,
-                       func_samples,
+                       func_positive_donors,
                        func_frequency]) \
-            .select_from(genomes_red.join(sample_set, genomes_red.c.item_id == sample_set.c.item_id)) \
-            .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.alt) \
-            .order_by(asc(func_frequency), asc(func_occurrence)) \
-            .limit(10)
+            .select_from(genomes_red.join(
+                sample_set_with_limit,
+                genomes_red.c.item_id == sample_set_with_limit.c.item_id)) \
+            .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt)
+        if out_min_freq is not None:
+            stmt = stmt.having(func_frequency >= out_min_freq)
+        stmt = stmt.order_by(asc(func_frequency), asc(func_occurrence))\
+            .limit(limit_result)
 
+        logger.debug(f'KGenomes: request rarest_variants/ for a population of {population_size} individuals')
+
+        # create result table
+        if population_size <= 333:
+            connection.execute('SET SESSION enable_seqscan=false')  # this + LIMIT force use the index on genomes table up to 149 individuals
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, 'KGenomes: RAREST MUTATIONS IN SAMPLE SET')
-        return stmt
+            logger.debug('KGenomes: RAREST MUTATIONS IN SAMPLE SET')
+        t_name = utils.random_t_name_w_prefix('rarest')
+        utils.create_table_as(t_name, stmt, default_schema_to_use_name, connection, self.log_sql_commands, logger.debug)
+        result = Table(t_name, db_meta, autoload=True, autoload_with=connection, schema=default_schema_to_use_name)
+        connection.invalidate()  # do not recycle this connection (instead of setting seqscan=true)
+        return result
 
     def values_of_attribute(self, connection, attribute: Vocabulary):
         # VIA DATABASE
         # self.connection = connection
         # region_attributes = genomes.columns.keys()
         # meta_attributes = metadata.columns.keys()
-        # print('regions:', region_attributes)
-        # print('meta:', meta_attributes)
+        # logger.debug('regions:', region_attributes)
+        # logger.debug('meta:', meta_attributes)
         # if attribute in meta_attributes:
         #     stmt = select([metadata.c[attribute]]).distinct()
         # elif attribute in region_attributes:
@@ -352,8 +386,8 @@ class KGenomes(Source):
                 first_select = first_select.where(from_table.c.item_id.in_(select([only_item_id_in_table.c.item_id])))
         if len(mutations_without_id) > 0:
             second_select = select_expression.where(
-                tuple_(from_table.c.start, from_table.c.alt, from_table.c.chrom).in_(
-                    [(mut.start, mut.alt, mut.chrom) for mut in mutations_without_id]
+                tuple_(from_table.c.start, from_table.c.ref, from_table.c.alt, from_table.c.chrom).in_(
+                    [(mut.start, mut.ref, mut.alt, mut.chrom) for mut in mutations_without_id]
                 ))
             if only_item_id_in_table is not None:
                 second_select = second_select.where(from_table.c.item_id.in_(select([only_item_id_in_table.c.item_id])))
@@ -388,7 +422,7 @@ class KGenomes(Source):
         elif self.meta_attrs.super_population:
             query = query.where(metadata.c.super_population.in_(self.meta_attrs.super_population))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
-        utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, True)
+        utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)
         # if self.log_sql_commands:
         #     utils.show_stmt(t_stmt, 'TABLE OF SAMPLES HAVING META')
@@ -446,7 +480,7 @@ class KGenomes(Source):
             target_t_name = utils.random_t_name_w_prefix('with')
             stmt_create_table = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
             if self.log_sql_commands:
-                utils.show_stmt(self.connection, stmt_create_table,
+                utils.show_stmt(self.connection, stmt_create_table, logger.debug,
                                 'INDIVIDUALS HAVING "ALL" THE {} MUTATIONS (WITH DUPLICATE ITEM_ID)'.format(
                                     len(self.region_attrs.with_variants)))
             self.connection.execute(stmt_create_table)
@@ -475,7 +509,8 @@ class KGenomes(Source):
                                                                   only_item_id_in_table=only_item_id_in_table)
         stmt_create_table = utils.stmt_create_table_as(t_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt_create_table, 'CREATE TABLE HAVING ANY OF THE {} MUTATIONS'.format(len(mutations)))
+            utils.show_stmt(self.connection, stmt_create_table, logger.debug,
+                            'CREATE TABLE HAVING ANY OF THE {} MUTATIONS'.format(len(mutations)))
         self.connection.execute(stmt_create_table)
         return Table(t_name, db_meta, autoload=True, autoload_with=self.connection,
                      schema=default_schema_to_use_name)
@@ -517,7 +552,7 @@ class KGenomes(Source):
         target_t_name = utils.random_t_name_w_prefix('with_var_same_c_copy')
         stmt = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt,
+            utils.show_stmt(self.connection, stmt, logger.debug,
                             'INDIVIDUALS (+ THE GIVEN MUTATIONS) HAVING ALL THE SPECIFIED MUTATIONS ON THE SAME CHROMOSOME COPY')
         self.connection.execute(stmt)
         if self.log_sql_commands:
@@ -561,7 +596,7 @@ class KGenomes(Source):
         target_t_name = utils.random_t_name_w_prefix('with_var_diff_c_copies')
         stmt = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt,
+            utils.show_stmt(self.connection, stmt, logger.debug,
                             'INDIVIDUALS (+ THE GIVEN MUTATIONS) HAVING BOTH MUTATIONS ON OPPOSITE CHROMOSOME COPIES')
         self.connection.execute(stmt)
         if self.log_sql_commands:
@@ -584,13 +619,13 @@ class KGenomes(Source):
                 raise ValueError('the given genomic interval is not complete')
             stmt_as = stmt_as.where((genomes.c.chrom == chrom) &
                                     (genomes.c.start >= left_end) &
-                                    (genomes.c.stop <= right_end))
+                                    (genomes.c.start <= right_end))
         if self.region_attrs.with_variants_of_type is not None:
             stmt_as = stmt_as.where(genomes.c.mut_type.in_(self.region_attrs.with_variants_of_type))
         generated_view_name = utils.random_t_name_w_prefix('mut_of_type_interval')
         stmt = utils.stmt_create_view_as(generated_view_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt,
+            utils.show_stmt(self.connection, stmt, logger.debug,
                             'VIEW OF REGIONS IN INTERVAL {} of types {}'.format(self.region_attrs.with_variants_in_reg,
                                                                                 self.region_attrs.with_variants_of_type))
         self.connection.execute(stmt)
@@ -626,7 +661,8 @@ class KGenomes(Source):
             target_t_name = utils.random_t_name_w_prefix('intersect')
             stmt_create_table = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
             if self.log_sql_commands:
-                utils.show_stmt(self.connection, stmt_create_table, 'SELECT ALL FROM SOURCE TABLES WHERE item_id IS IN ALL SOURCE TABLES')
+                utils.show_stmt(self.connection, stmt_create_table, logger.debug,
+                                'SELECT ALL FROM SOURCE TABLES WHERE item_id IS IN ALL SOURCE TABLES')
             self.connection.execute(stmt_create_table)
             # TODO drop partial tables ?
             return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,

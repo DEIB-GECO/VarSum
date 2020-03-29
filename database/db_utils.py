@@ -6,29 +6,30 @@ from datetime import datetime
 
 
 # EXECUTORS
-def exec_raw_query(query_string, connection, log_sql_statement: bool) -> ResultProxy:
+def exec_raw_query(query_string, connection, log_sql_statement: bool, log_function) -> ResultProxy:
     """
     :param query_string: raw SQL query without the trailing ';'
     :param connection
     :param log_sql_statement
+    :param log_function a print function or other log function
     :return: a sqlalchemy.engine.ResultProxy object
     """
     _query = text(query_string + ';')
-    print('###      EXECUTE RAW QUERY       ###')
     if log_sql_statement:
-        show_stmt(connection, _query)
+        log_function('###      EXECUTE RAW QUERY       ###')
+        show_stmt(connection, _query, log_function, None)
     return connection.execute(_query)
 
 
-def drop_view(name: str, from_schema: str, connection, log_sql_stmt: bool):
-    exec_raw_query('DROP VIEW "' + from_schema + '".' + name, connection, log_sql_stmt)
+def drop_view(name: str, from_schema: str, connection, log_sql_stmt: bool, log_function):
+    exec_raw_query('DROP VIEW "' + from_schema + '".' + name, connection, log_sql_stmt, log_function)
 
 
-def create_table_as(name: str, select_stmt, into_schema, connection, log_sql_stmt: bool):
+def create_table_as(name: str, select_stmt, into_schema, connection, log_sql_stmt: bool, log_function):
     compiled_select = select_stmt.compile(compile_kwargs={"literal_binds": True},
                                           dialect=connection.dialect)
     stmt = 'CREATE TABLE "' + into_schema + '".' + name + ' AS ' + str(compiled_select)
-    exec_raw_query(stmt, connection, log_sql_stmt)
+    exec_raw_query(stmt, connection, log_sql_stmt, log_function)
 
 
 # VISUALIZE RESULTS AND QUERIES
@@ -41,12 +42,12 @@ def print_query_result(result: ResultProxy):
     print(pretty_table)
 
 
-def show_stmt(connection, stmt, intro=None):
+def show_stmt(connection, stmt, log_function, intro):
     # #substitued by instr below
     if intro is not None:
-        print('###   ' + intro + '   ###')
+        log_function('###   ' + intro + '   ###')
     compiled_stmt = stmt.compile(compile_kwargs={"literal_binds": True}, dialect=connection.dialect)
-    print(str(compiled_stmt))
+    log_function(str(compiled_stmt))
 
 
 def print_table_named(connection, db_meta, table_name: str, table_schema: str):

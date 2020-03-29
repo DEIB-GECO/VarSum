@@ -7,7 +7,7 @@ info:
     information visit the repository tomalf2/data_summarization_1KGP on GitHub
   version: 0.1.0
 servers:
-  - url: 'http://api.example.com/'
+  - url: 'http://localhost:51992/'
     description: 'Optional server description, e.g. Main (production) server'
 paths:
   /values/{attribute}:
@@ -56,7 +56,7 @@ paths:
       summary: >
         Returns the distribution of the individuals inside a population having the requested characteristics.
       description: >
-        Given a set of characterstics (parameters "meta" and "variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "by_attributes".
+        Given a set of characteristics (parameters "meta" and "variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "by_attributes".
       requestBody:
         required: true
         content:
@@ -159,7 +159,9 @@ paths:
       summary: >-
         Returns a list of the most common variants inside the selected population.
       description: >-
-        The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. The "variants" parameter is requested in order to reduce the size of the population, because this operation is very computationally expensive.
+        The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
+
+        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 333 individuals, and ~45 minutes above such number.
       requestBody:
         required: true
         content:
@@ -168,16 +170,24 @@ paths:
               type: object
               required:
                 - meta
-                - variants
               properties:
                 meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 variants:
                   $ref: '#/components/schemas/FilterVariants'
+                filter_output:
+                  type: object
+                  properties:
+                    max_frequency:
+                      type: number
+                      example: 0.998
+                    limit:
+                      type: integer
+                      example: 10
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names, which include the identifier of the variant using its coordinates (chrom, start, stop), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The item ("columns") is an array of the table column names, which include the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
           content:
             application/json:
               schema:
@@ -194,8 +204,8 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['chrom', 'start', 'alt', 'donors', 'occurrence', 'frequency']
-                rows: [['1', '10768', 'T', 8, 16, 1.0], ['1', '102889', 'GT', 7, 13, 0,8125]]
+                columns: ['chrom', 'start', 'ref', 'alt', 'donors', 'occurrence', 'frequency']
+                rows: [['1', '10768', 'G', 'T', 8, 16, 1.0], ['1', '102889', '', 'GT', 7, 13, 0,8125]]
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
         '503':
@@ -208,7 +218,9 @@ paths:
       summary: >-
         Returns a list of the rarest variants inside the selected population.
       description: >-
-        The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. The "variants" parameter is requested in order to reduce the size of the population, because this operation is very computationally expensive.
+        The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
+
+        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 333 individuals, and ~45 minutes above such number.
       requestBody:
         required: true
         content:
@@ -217,16 +229,25 @@ paths:
               type: object
               required:
                 - meta
-                - variants
               properties:
                 meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 variants:
                   $ref: '#/components/schemas/FilterVariants'
+                filter_output:
+                  type: object
+                  properties:
+                    min_frequency:
+                      type: number
+                      example: 0.0099
+                    limit:
+                      type: integer
+                      example: 10
+
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names, which include the identifier of the variant using its coordinates (chrom, start, stop), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The item ("columns") is an array of the table column names, which include the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
           content:
             application/json:
               schema:
@@ -243,8 +264,8 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['chrom', 'start', 'alt', 'donors', 'occurrence', 'frequency']
-                rows: [['1', '10768', 'T',  2, 3, 0.075‬], ['1', '102889', 'GT', 1, 2, 0.05]]
+                columns: ['chrom', 'start', 'ref', 'alt', 'donors', 'occurrence', 'frequency']
+                rows: [['1', '10768', 'G', 'T',  2, 3, 0.075‬], ['1', '102889', '', 'GT', 1, 2, 0.05]]
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
         '503':
@@ -269,15 +290,19 @@ components:
           type: integer
         start:
           type: integer
+        ref:
+          type: string
         alt:
           type: string
       required:
         - chrom
         - start
+        - ref
         - alt
       example:
         chrom: 1
         start: 176541
+        ref: G
         alt: C
 
     Variant:

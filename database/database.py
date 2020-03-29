@@ -31,12 +31,12 @@ def check_and_get_connection(num_attempts: int = 2) -> Connection:
     try:
         num_attempts -= 1
         connection.scalar(select([1]))
-        logger.debug('Connection with pre-ping', db_engine.pool.status())
+        logger.debug(f'Connection with pre-ping {str(db_engine.pool.status())}')
         return connection
     except sqlalchemy_exceptions.DatabaseError as e:  # pooled database connection has been invalidated/restarted
         logger.debug('Connection has been reset. Invalidate connection pool.')
         db_engine.dispose()
-        logger.debug('POOL STATUS', db_engine.pool.status())
+        logger.debug(f'POOL STATUS {str(db_engine.pool.status())}')
         if num_attempts > 0:
             logger.debug('Attempt {} more time(s)'.format(num_attempts))
             return check_and_get_connection(num_attempts)
@@ -54,7 +54,7 @@ def try_stmt(what, num_attempts: int = 2) -> ResultProxy:
     except sqlalchemy_exceptions.DatabaseError as e:  # pooled database connection has been invalidated/restarted
         logger.debug('Connection has been reset. Invalidate connection pool.')
         db_engine.dispose()
-        logger.debug('POOL STATUS', db_engine.pool.status())
+        logger.debug(f'POOL STATUS {str(db_engine.pool.status())}')
         if num_attempts > 0:
             logger.debug('Attempt {} more time(s)'.format(num_attempts))
             return try_stmt(what, num_attempts)
@@ -74,7 +74,7 @@ def try_py_function(func, num_attempts: int = 2):
     except sqlalchemy_exceptions.DatabaseError as e:  # pooled database connection has been invalidated/restarted
         logger.debug('Connection has been reset. Invalidate connection pool.')
         db_engine.dispose()
-        logger.debug('POOL STATUS', db_engine.pool.status())
+        logger.debug(f'POOL STATUS {str(db_engine.pool.status())}')
         if num_attempts > 0:
             logger.debug('Attempt {} more time(s)'.format(num_attempts))
             return try_py_function(func, num_attempts)

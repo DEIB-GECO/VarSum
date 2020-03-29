@@ -21,6 +21,11 @@ class ReqParamKeys:
     WITH_VARS_ON_SAME_CHROM_COPY = 'on_same_chrom_copy'
     WITH_VARS_ON_DIFF_CHROM_COPY = 'on_diff_chrom_copy'
 
+    OUTPUT = 'filter_output'
+    OUT_MIN_FREQUENCY = 'min_frequency'
+    OUT_MAX_FREQUENCY = 'max_frequency'
+    OUT_LIMIT = 'limit'
+
     BY_ATTRIBUTES = 'distribute_by'
 
     TARGET_VARIANT = 'target_variant'
@@ -33,8 +38,8 @@ flask_app = connexion_app.app
 def run():
     # do this only after the declaration of the api endpoint handlers
     connexion_app.add_api('api_definition.yml')  # <- yml located inside the specification dir
-    connexion_app.run(host='127.0.0.1',
-                      port=5000,
+    connexion_app.run(host='localhost',
+                      port=51992,
                       debug=True,
                       use_reloader=False)   # prevents module main from starting twice, but disables auto-reload upon changes detected
 
@@ -64,7 +69,7 @@ def variant_distribution(body):
 def most_common_variants(body):
     def go():
         params = prepare_body_parameters(body)
-        result = coordinator.most_common_variants(params[0], params[1])
+        result = coordinator.most_common_variants(params[0], params[1], params[6], params[5])
         print('response contains {} rows'.format(result.rowcount))
         marshalled = result_proxy_as_dict(result)
         return marshalled
@@ -74,7 +79,7 @@ def most_common_variants(body):
 def rarest_variants(body):
     def go():
         params = prepare_body_parameters(body)
-        result = coordinator.rarest_variants(params[0], params[1])
+        result = coordinator.rarest_variants(params[0], params[1], params[4], params[5])
         print('response contains {} rows'.format(result.rowcount))
         marshalled = result_proxy_as_dict(result)
         return marshalled
@@ -98,8 +103,6 @@ def home():
 
 # ###########################       TRANSFORM INPUT
 def prepare_body_parameters(body):
-    meta, regions, by_attributes, target_variant = None, None, None, None   # sources should always check for null arguments
-
     meta = body.get(ReqParamKeys.META)
     if meta is not None:
         meta = MetadataAttrs(gender=meta.get(ReqParamKeys.GENDER),
@@ -111,21 +114,33 @@ def prepare_body_parameters(body):
 
     variants = body.get(ReqParamKeys.VARIANTS)
     if variants is not None:
-        regions = RegionAttrs(parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARIANTS)),
-                              parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY)),
-                              parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY)))
+        variants = RegionAttrs(parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARIANTS)),
+                               parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY)),
+                               parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY)))
 
+    by_attributes = None
     distribute_by = body.get(ReqParamKeys.BY_ATTRIBUTES)
     if distribute_by is not None:
         by_attributes = list()
-        for att in [ReqParamKeys.GENDER, ReqParamKeys.HEALTH_STATUS, ReqParamKeys.DNA_SOURCE, ReqParamKeys.POPULATION_CODE, ReqParamKeys.SUPER_POPULATION_CODE]: # TODO missing mut type
+        for att in [ReqParamKeys.GENDER, ReqParamKeys.HEALTH_STATUS, ReqParamKeys.DNA_SOURCE,
+                    ReqParamKeys.POPULATION_CODE, ReqParamKeys.SUPER_POPULATION_CODE]:  # TODO missing mut type
             if att in distribute_by:
                 by_attributes.append(parse_name_to_vocabulary(att))
 
-    t_var = body.get(ReqParamKeys.TARGET_VARIANT)
-    if t_var is not None:
-        target_variant = parse_to_mutation_array([t_var])[0]
-    return meta, regions, by_attributes, target_variant
+    target_variant = body.get(ReqParamKeys.TARGET_VARIANT)
+    if target_variant is not None:
+        target_variant = parse_to_mutation_array([target_variant])[0]
+
+    out_limit = None
+    out_min_frequency = None
+    out_max_frequency = None
+    output = body.get(ReqParamKeys.OUTPUT)
+    if output is not None:
+        out_limit = output.get(ReqParamKeys.OUT_LIMIT)
+        out_max_frequency = output.get(ReqParamKeys.OUT_MAX_FREQUENCY)
+        out_min_frequency = output.get(ReqParamKeys.OUT_MIN_FREQUENCY)
+
+    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency
 
 
 def parse_to_mutation_array(dict_array_of_mutations):

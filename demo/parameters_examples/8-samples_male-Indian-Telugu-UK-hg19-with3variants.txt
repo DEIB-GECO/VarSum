@@ -5,7 +5,10 @@
     'assembly': 'hg19'
     },
  'variants': {
-     'with': [{'chrom': 1, 'start': 13271, 'alt':'C'}, {'chrom': 1, 'start': 15272, 'alt': 'T'}, {'chrom': 1, 'start': 10176, 'alt': 'C'}]
+     'with': [
+         {'chrom': 1, 'start': 13271, 'ref': 'G', 'alt':'C'}, 
+         {'chrom': 1, 'start': 15272, 'ref': 'A', 'alt': 'T'}, 
+         {'chrom': 1, 'start': 10176, ref: '', 'alt': 'C'}]
  }
 }
 

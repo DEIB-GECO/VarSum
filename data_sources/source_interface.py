@@ -30,22 +30,23 @@ class Source:
                            region_attrs: RegionAttrs, variant: Mutation) -> FromClause:
         """
         Requests a source to return the individuals having the characteristics in meta attrs and region attrs. For
-        each of them specify the occurrence of the "variant" (as a number 0/1/2) in a column named as
-        Vocabulary.OCCURRENCE.name and the attributes given in by_attributes (which always includes the donor identifier).
+        each of them specify
+        - the occurrence of the target variant (as a number 0/1/2) in a column named as Vocabulary.OCCURRENCE.name.
+        - the attributes given in by_attributes (which always includes the donor identifier).
         Order is not important. Use the nomenclature available in Vocabulary for column names.
         """
         raise NotImplementedError('Any subclass of Source must implement the abstract method "variant_occurrence".')
 
-    def most_common_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
+    def most_common_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: float, limit_result: int):
         raise NotImplementedError('Any subclass of Source must implement the abstract method "most_common_variant".')
 
-    def rarest_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
+    def rarest_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: float, limit_result: int):
         raise NotImplementedError('Any subclass of Source must implement the abstract method "rarest_variant".')
 
     def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "values_of_attribute".')
 
-    def can_express_constraint(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
+    def can_express_constraint(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, method=None):
         if len(self.meta_col_map) == 0 or len(self.avail_region_constraints) == 0:
             raise NotImplementedError('Source concrete implementations need to override class '
                                       'dictionary "meta_col_map" and set "avail_region_constraints"')

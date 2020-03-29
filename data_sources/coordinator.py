@@ -19,7 +19,7 @@ LOG_SQL_STATEMENTS = True
 
 
 def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Optional[ResultProxy]:
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs)]
+    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.donors)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
     by_attributes_copy = by_attributes.copy()
@@ -75,16 +75,15 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
 
         def compute_result(connection: Connection):
             if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, 'DONOR DISTRIBUTION')
+                db_utils.show_stmt(connection, stmt, logger.debug, 'DONOR DISTRIBUTION')
             result = connection.execute(stmt)
-            # db_utils.print_query_result(result)     # TODO REMOVE!!! It consumes the cursor !
             return result
 
         return database.try_py_function(compute_result)
 
 
 def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> Optional[ResultProxy]:
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs)]
+    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.variant_occurrence)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
     by_attributes_copy = by_attributes.copy()
@@ -145,24 +144,27 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
 
         def compute_result(connection: Connection):
             if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, 'VARIANT DISTRIBUTION')
+                db_utils.show_stmt(connection, stmt, logger.debug, 'VARIANT DISTRIBUTION')
             result = connection.execute(stmt)
-            # db_utils.print_query_result(result)     # TODO REMOVE!!! It consumes the cursor !
             return result
 
         return database.try_py_function(compute_result)
 
 
-def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Optional[ResultProxy]:
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs)]
+def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: float = None, limit_result: int = 10) -> Optional[ResultProxy]:
+    if limit_result is None:
+        limit_result = 10
+    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.most_common_variant)]
 
     select_from_source_output = [
         column(Vocabulary.CHROM.name),
         column(Vocabulary.START.name),
+        column(Vocabulary.REF.name),
         column(Vocabulary.ALT.name),
-        column(Vocabulary.COUNT.name),
-        column(Vocabulary.OCCURRENCE.name),
-        column(Vocabulary.FREQUENCY.name)
+        column(Vocabulary.POPULATION_SIZE.name),
+        column(Vocabulary.POSITIVE_DONORS.name),
+        column(Vocabulary.OCCURRENCE.name).label('OCCURRENCE_OF_VARIANT'),
+        column(Vocabulary.FREQUENCY.name).label('FREQUENCY_OF_VARIANT')
     ]
 
     source_fatal_errors = dict()
@@ -172,7 +174,8 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -
             obj = source()
 
             def most_common_var_from_source(connection: Connection):
-                source_stmt = obj.most_common_variant(connection, meta_attrs, region_attrs).alias(source.__name__)
+                source_stmt = obj.most_common_variant(connection, meta_attrs, region_attrs, out_max_freq, limit_result)\
+                    .alias(source.__name__)
                 return \
                     select(select_from_source_output) \
                     .select_from(source_stmt)
@@ -195,22 +198,25 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -
 
         def compute_result(connection: Connection):
             if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, 'MOST COMMON VARIANTS')
+                db_utils.show_stmt(connection, stmt, logger.debug, 'MOST COMMON VARIANTS')
             result = connection.execute(stmt)
-            # db_utils.print_query_result(result)     # TODO REMOVE!!! It consumes the cursor !
             return result
 
         return database.try_py_function(compute_result)
 
-# TODO CHANGE NAME IN LEAST_RARE
-def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Optional[ResultProxy]:
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs)]
+
+def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: float, limit_result: int = 10) -> Optional[ResultProxy]:
+    if limit_result is None:
+        limit_result = 10
+    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.rarest_variant)]
 
     select_from_source_output = [
         column(Vocabulary.CHROM.name),
         column(Vocabulary.START.name),
+        column(Vocabulary.REF.name),
         column(Vocabulary.ALT.name),
-        column(Vocabulary.COUNT.name),
+        column(Vocabulary.POPULATION_SIZE.name),
+        column(Vocabulary.POSITIVE_DONORS.name),
         column(Vocabulary.OCCURRENCE.name),
         column(Vocabulary.FREQUENCY.name)
     ]
@@ -222,7 +228,8 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Opt
             obj = source()
 
             def rarest_var_from_source(connection: Connection):
-                source_stmt = obj.rarest_variant(connection, meta_attrs, region_attrs).alias(source.__name__)
+                source_stmt = obj.rarest_variant(connection, meta_attrs, region_attrs, out_min_freq, limit_result)\
+                    .alias(source.__name__)
                 return \
                     select(select_from_source_output) \
                     .select_from(source_stmt)
@@ -246,9 +253,8 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Opt
 
         def compute_result(connection: Connection):
             if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, 'RAREST VARIANT')
+                db_utils.show_stmt(connection, stmt, logger.debug, 'RAREST VARIANT')
             result = connection.execute(stmt)
-            # db_utils.print_query_result(result)  # TODO REMOVE!!! It consumes the cursor !
             return result
 
         return database.try_py_function(compute_result)

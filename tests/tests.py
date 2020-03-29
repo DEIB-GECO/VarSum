@@ -14,12 +14,13 @@ if __name__ == '__main__':
 # these two are on different chromosome copies
 mut1 = Mutation(_id='rs367896724')
 mut2 = Mutation(_id='rs555500075')
-mut2_fingerprint = Mutation(chrom=1, start=10351, alt='A')
+mut2_fingerprint = Mutation(1, 10351, '', 'A')
 # these two are on same chromosome copy
 mut3_al1 = Mutation(_id='rs367896724')
-mut3_fingerprint = Mutation(1, 10176, 'C')
+mut3_fingerprint = Mutation(1, 10176, '', 'C')
 mut4_al1 = Mutation(_id='rs376342519')
-mut4_fingerprint = Mutation(1, 10615, '')
+# noinspection SpellCheckingInspection
+mut4_fingerprint = Mutation(1, 10615, 'CGCCGTTGCAAAGGCGCGCCG', '')
 
 hg19_healthy_SAS = MetadataAttrs(gender=None,
                                  health_status='true',
@@ -167,5 +168,35 @@ by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
 # result_proxy = coordinator.variant_distribution(by_attributes, hg19_healthy_female_BEB, None, mut1)
 # db_utils.print_query_result(result_proxy)
 # result_proxy = coordinator.most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
+# db_utils.print_query_result(result_proxy)
 # print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
 
+
+connection = database.check_and_get_connection()
+try:
+    # print('changing seqscan')
+    # connection.execute('SET SESSION enable_seqscan=false')
+    # print('show seqscan')
+    # seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+    # print(seqscan_value)
+    print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+    seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+    print('seqscan ', seqscan_value)
+    connection.execute('SET SESSION enable_seqscan=false')
+    seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+    print('seqscan ', seqscan_value)
+    print('invalidate connection')
+    connection.invalidate()
+    print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+finally:
+    connection.close()
+
+print('connection invalidated and closed')
+print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+print('get a new connection')
+connection = database.check_and_get_connection()
+seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+print('seqscan ', seqscan_value)
+print('close it')
+connection.close()
+print(f'POOL STATUS {str(database.db_engine.pool.status())}')

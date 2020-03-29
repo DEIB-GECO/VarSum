@@ -4,33 +4,39 @@ from enum import Enum
 
 class Mutation:
 
-    def __init__(self, chrom: int = None, start: int = None, alt: str = None, _id: str = None):
+    def __init__(self, chrom: int = None, start: int = None, ref: str = None, alt: str = None, _id: str = None):
         """
         :param int chrom:
         :param int start:
+        :param str ref:
         :param str alt:
         :param str _id:
         :return:
         """
-        if (chrom is None or start is None or alt is None) and _id is None:
-            raise VariantUndefined(f"Cannot identify Mutation. One between ID and (chrom, start, alt) must be provided."
-                                   "Input was: ID {mutation_dict.get('id')} CHROM {mutation_dict.get('chrom')} "
-                                   " START {mutation_dict.get('start')} ALT {mutation_dict.get('alt')}")
+        if (chrom is None or start is None or ref is None or alt is None) and _id is None:
+            raise VariantUndefined(
+                "Cannot identify Mutation. One between ID and (chrom, start, ref, alt) must be provided. "
+                f"Input was: ID {_id} CHROM {chrom} START {start} REF {ref} ALT {alt}")
         self.id = _id
         self.chrom = chrom
         self.start = start
+        self.ref = ref
         self.alt = alt
 
     @staticmethod
     def from_dict(mutation_dict: dict):
         if mutation_dict.get('id') is not None:
             return Mutation(_id=mutation_dict['id'])
-        elif mutation_dict.get('chrom') is not None and mutation_dict.get('start') is not None and mutation_dict.get('alt') is not None:
-            return Mutation(chrom=mutation_dict['chrom'], start=mutation_dict['start'], alt=mutation_dict['alt'])
+        elif mutation_dict.get('chrom') is not None \
+                and mutation_dict.get('start') is not None \
+                and mutation_dict.get('ref') is not None \
+                and mutation_dict.get('alt') is not None:
+            return Mutation(chrom=mutation_dict['chrom'], start=mutation_dict['start'], ref=mutation_dict['ref'], alt=mutation_dict['alt'])
         else:
-            raise VariantUndefined("Cannot identify Mutation. One between ID and (chrom, start, alt) must be provided. "
+            raise VariantUndefined("Cannot identify Mutation. One between ID and (chrom, start, ref, alt) must be provided. "
                                    f"Input was: ID {mutation_dict.get('id')} CHROM {mutation_dict.get('chrom')} "
-                                   f" START {mutation_dict.get('start')} ALT {mutation_dict.get('alt')}")
+                                   f" START {mutation_dict.get('start')} REF {mutation_dict.get('ref')} "
+                                   f"ALT {mutation_dict.get('alt')}")
 
 
 class VariantUndefined(Exception):
@@ -162,11 +168,14 @@ class Vocabulary(Enum):
     FREQUENCY = 201
     COUNT = 202
     OCCURRENCE = 203
+    POPULATION_SIZE = 204
+    POSITIVE_DONORS = 205
 
     # identifiers of a variation
     CHROM = 401
     START = 402
-    ALT = 403
+    REF = 403
+    ALT = 404
 
     # special values
     unknown = 301
