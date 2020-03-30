@@ -21,7 +21,7 @@ def config_db_engine_parameters(flask_app, db_user, db_password):
 def config_db_engine_for_tests(db_user, db_password):
     import sqlalchemy
     global db_engine
-    db_engine = sqlalchemy.create_engine('postgresql://{0}:{1}@localhost:15432/gmql_meta_new16_tommaso'.format(db_user, db_password))
+    db_engine = sqlalchemy.create_engine('postgresql://{0}:{1}@localhost:5432/gmql_meta_new16_tommaso'.format(db_user, db_password))
     logger.debug('db_engine_configured')
 
 
