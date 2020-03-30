@@ -33,7 +33,8 @@ class ReqParamKeys:
 
 connexion_app = connexion.App(__name__, specification_dir='./')  # internally it starts flask
 flask_app = connexion_app.app
-
+base_path = '/popvar/'
+api_doc_relative_path = 'api/ui/'
 
 def run():
     # do this only after the declaration of the api endpoint handlers
@@ -98,9 +99,10 @@ def values(attribute):
     return try_and_catch(go)
 
 
-@connexion_app.route('/')
+@connexion_app.route(base_path)
 def home():
-    return redirect('ui/')
+    # redirect to base_path + api_doc_relative_path
+    return redirect(api_doc_relative_path)
 
 
 # ###########################       TRANSFORM INPUT
