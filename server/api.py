@@ -33,7 +33,7 @@ class ReqParamKeys:
 
 connexion_app = connexion.App(__name__, specification_dir='./')  # internally it starts flask
 flask_app = connexion_app.app
-base_path = '/popvar/'
+base_path = '/popstudy/'
 api_doc_relative_path = 'api/ui/'
 
 def run():

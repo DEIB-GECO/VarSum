@@ -7,7 +7,7 @@ info:
     information visit the repository tomalf2/data_summarization_1KGP on GitHub
   version: 0.1.0
 servers:
-  - url: /popvar/api/
+  - url: /popstudy/api/
 paths:
   /values/{attribute}:
     summary: >-
