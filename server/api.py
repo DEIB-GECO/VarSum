@@ -41,6 +41,7 @@ def run():
     connexion_app.run(host='localhost',
                       port=51992,
                       debug=True,
+                      threaded=True,        # this is True by default of Flask - I just wanna to make it explicit
                       use_reloader=False)   # prevents module main from starting twice, but disables auto-reload upon changes detected
 
 
@@ -89,10 +90,11 @@ def rarest_variants(body):
 def values(attribute):
     def go():
         item = parse_name_to_vocabulary(attribute)
-        if item is not None:
-            return coordinator.values_of_attribute(item)
-        else:
+        if item is None:
             return bad_request_message()
+        else:
+            result = coordinator.values_of_attribute(item)
+            return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -197,6 +199,13 @@ def try_and_catch(function, *args, **kwargs):
     except Exception as e:
         logger.exception(e)
         return service_unavailable_message()
+
+
+@flask_app.errorhandler(Exception)
+def unhandled_exception(e):
+    logger.error('! An uncaught exception reached the default exception handler !')
+    logger.exception(e)
+    return 'Internal server error', 500
 
 
 def service_unavailable_message():

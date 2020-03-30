@@ -347,8 +347,9 @@ class KGenomes(Source):
                 logger.debug('initializing tables for class KGenomes')
                 # reflect already existing tables (u can access columns as <table>.c.<col_name> or <table>.c['<col_name>'])
                 db_meta = MetaData()
-                connection = database.check_and_get_connection()
+                connection = None
                 try:
+                    connection = database.check_and_get_connection()
                     metadata = Table(default_metadata_table_name,
                                      db_meta,
                                      autoload=True,
@@ -361,7 +362,8 @@ class KGenomes(Source):
                                     schema=default_region_schema_name)
                 finally:
                     initializing_lock.release()
-                    connection.close()
+                    if connection is not None:
+                        connection.close()
             else:
                 logger.debug('Waiting ongoing initialization of tables')
                 initializing_lock.release()
