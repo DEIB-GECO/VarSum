@@ -5,7 +5,15 @@ from typing import List
 
 
 class Source:
-    """Base abstract class for all the sources."""
+    """
+        Base abstract class for all the sources. Any source data source of genomic data must declare the fields
+        1. meta_col_map: a dictionary mapping io_parameters.Vocabulary names to the names in use inside the source, typically
+        the names of the columns of the backing database.
+        2. avail_region_constraints: a set of io_parameters.Vocabulary expressing the kind of constraints that the source can
+        enforce on region data in order to filter the variants.
+        These fields support the coordinator and some methods of Source (those annotated with @classmethod). A
+        subclass of Source can override them if necessary. Instead the other methods must be overridden.
+        """
 
     meta_col_map: dict = {}
     avail_region_constraints: set = set()
@@ -46,19 +54,24 @@ class Source:
     def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "values_of_attribute".')
 
-    def can_express_constraint(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, method=None):
-        if len(self.meta_col_map) == 0 or len(self.avail_region_constraints) == 0:
+    @classmethod
+    def can_express_constraint(cls, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, method=None):
+        if len(cls.meta_col_map) == 0 or len(cls.avail_region_constraints) == 0:
             raise NotImplementedError('Source concrete implementations need to override class '
                                       'dictionary "meta_col_map" and set "avail_region_constraints"')
         has_all = True  # initial assumption
         if meta_attrs is not None:
             idx = 0
             while has_all and idx < len(meta_attrs.constrained_dimensions):
-                has_all = self.meta_col_map.get(meta_attrs.constrained_dimensions[idx]) is not None
+                has_all = cls.meta_col_map.get(meta_attrs.constrained_dimensions[idx]) is not None
                 idx += 1
         if has_all and region_attrs is not None:
-            has_all = self.avail_region_constraints.issuperset(region_attrs.requires)
+            has_all = cls.avail_region_constraints.issuperset(region_attrs.requires)
         return has_all
 
-    def get_available_attributes(self):
-        return self.meta_col_map.keys()
+    @classmethod
+    def get_available_attributes(cls):
+        if len(cls.meta_col_map) == 0:
+            raise NotImplementedError('Source concrete implementations need to override class '
+                                      'dictionary "meta_col_map" and set "avail_region_constraints"')
+        return cls.meta_col_map.keys()

@@ -19,7 +19,7 @@ LOG_SQL_STATEMENTS = True
 
 
 def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Optional[ResultProxy]:
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.donors)]
+    eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
     by_attributes_copy = by_attributes.copy()
@@ -83,7 +83,7 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
 
 
 def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> Optional[ResultProxy]:
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.variant_occurrence)]
+    eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
     by_attributes_copy = by_attributes.copy()
@@ -154,7 +154,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
 def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: float = None, limit_result: int = 10) -> Optional[ResultProxy]:
     if limit_result is None:
         limit_result = 10
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.most_common_variant)]
+    eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
 
     select_from_source_output = [
         column(Vocabulary.CHROM.name),
@@ -208,7 +208,7 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
 def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: float, limit_result: int = 10) -> Optional[ResultProxy]:
     if limit_result is None:
         limit_result = 10
-    eligible_sources = [source for source in _sources if source.can_express_constraint(source, meta_attrs, region_attrs, source.rarest_variant)]
+    eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
 
     select_from_source_output = [
         column(Vocabulary.CHROM.name),
@@ -261,7 +261,7 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
 
 
 def values_of_attribute(attribute: Vocabulary) -> Optional[List]:
-    eligible_sources = [source for source in _sources if attribute in source.get_available_attributes(source)]
+    eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
 
     source_fatal_errors = dict()
 
