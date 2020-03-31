@@ -11,8 +11,7 @@ servers:
 paths:
   /values/{attribute}:
     summary: >-
-      The set of values that can be specified
-      in the body request of the other endpoints (mutation excluded)
+      The set of values that can be used for a given attribute.
     get:
       summary: Returns the set of values available for the given attribute
       operationId: server.api.values
@@ -20,12 +19,12 @@ paths:
         - name: attribute
           in: path
           required: true
-          description: A comma separated list of the attributes for which one wants to know the values.
+          description: The name of the attribute of which you want to know the values.
           explode: false
           style: simple
           schema:
             type: string
-            enum: [assembly, gender, population, super_population, dna_source]
+            enum: [assembly, gender, population, super_population, dna_source, health_status]
       responses:
         '200':
           description: >-

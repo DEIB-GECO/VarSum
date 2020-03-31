@@ -182,6 +182,8 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.DNA_SOURCE
     elif name == ReqParamKeys.HEALTH_STATUS:
         return Vocabulary.HEALTH_STATUS
+    elif name == ReqParamKeys.ASSEMBLY:
+        return Vocabulary.ASSEMBLY
     else:
         logger.info('name without a match in Vocabulary')
         return None
