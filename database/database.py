@@ -7,9 +7,9 @@ from loguru import logger
 db_engine: Engine
 
 
-def config_db_engine_parameters(flask_app, db_user, db_password):
+def config_db_engine_parameters(flask_app, db_user, db_password, db_port):
     # configure default database (add more if needed: https://flask-sqlalchemy.palletsprojects.com/en/2.x/binds/)
-    flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{1}@localhost:5432/gmql_meta_new16_tommaso'.format(db_user, db_password)
+    flask_app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{db_user}:{db_password}@localhost:{db_port}/gmql_meta_new16_tommaso'
     flask_app.config['SQLALCHEMY_ECHO'] = False
     flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # event-driven system of SQLAlchemy increases overhead
     sql_alchemy_app = SQLAlchemy(flask_app)
@@ -18,10 +18,10 @@ def config_db_engine_parameters(flask_app, db_user, db_password):
     logger.debug('db_engine_configured')
 
 
-def config_db_engine_for_tests(db_user, db_password):
+def config_db_engine_for_tests(db_user, db_password, db_port):
     import sqlalchemy
     global db_engine
-    db_engine = sqlalchemy.create_engine('postgresql://{0}:{1}@localhost:5432/gmql_meta_new16_tommaso'.format(db_user, db_password))
+    db_engine = sqlalchemy.create_engine(f'postgresql://{db_user}:{db_password}@localhost:{db_port}/gmql_meta_new16_tommaso')
     logger.debug('db_engine_configured')
 
 
