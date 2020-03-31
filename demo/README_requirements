@@ -1,0 +1,6 @@
+# this and the following packages are required for running the PyNotebook in /demo/*
+matplotlib
+pandas
+jupyter
+notebook
+seaborn

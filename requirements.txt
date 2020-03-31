@@ -6,7 +6,3 @@ Flask-SQLAlchemy
 Psycopg2==2.8.4
 Prettytable
 loguru
-matplotlib # this and the following packages are required only for running the PyNotebook in /demo/
-pandas
-jupyter
-notebook
