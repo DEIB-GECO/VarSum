@@ -23,4 +23,4 @@ if __name__ == '__main__':
         database.config_db_engine_for_tests(db_user, db_password, db_port)
         import tests.tests                              # this runs anything is in the tests.py module
     else:
-        logger.critical('The first program argument must be either "server" or "tests" followed by database username and password.')
+        logger.critical('The first program argument must be either "server" or "tests" followed by database username, password and port.')

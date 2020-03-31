@@ -8,7 +8,7 @@ from loguru import logger
 
 
 class ReqParamKeys:
-    META = 'meta'
+    META = 'having_meta'
     GENDER = 'gender'
     HEALTH_STATUS = 'health_status'
     DNA_SOURCE = 'dna_source'
@@ -16,7 +16,7 @@ class ReqParamKeys:
     POPULATION_CODE = 'population'
     SUPER_POPULATION_CODE = 'super_population'
 
-    VARIANTS = 'variants'
+    VARIANTS = 'having_variants'
     WITH_VARIANTS = 'with'
     WITH_VARS_ON_SAME_CHROM_COPY = 'on_same_chrom_copy'
     WITH_VARS_ON_DIFF_CHROM_COPY = 'on_diff_chrom_copy'
