@@ -64,6 +64,7 @@ paths:
               type: object
               required:
                 - meta
+                - distribute_by
               properties:
                 distribute_by:
                   $ref: '#/components/schemas/DistributeBy'
@@ -71,6 +72,15 @@ paths:
                   $ref: '#/components/schemas/FilterMetadata'
                 variants:
                   $ref: '#/components/schemas/FilterVariants'
+            example:
+              distribute_by: [gender]
+              meta:
+                assembly: hg19
+                super_population: [EAS]
+                health_status: 'true'
+              variants:
+                with: [id: rs367896724]
+
       responses:
         '200':
           description: >-
@@ -114,6 +124,7 @@ paths:
               type: object
               required:
                 - meta
+                - distribute_by
                 - target_variant
               properties:
                 distribute_by:
@@ -124,6 +135,17 @@ paths:
                   $ref: '#/components/schemas/FilterVariants'
                 target_variant:
                   $ref: '#/components/schemas/Variant'
+            example:
+              distribute_by: [population]
+              meta:
+                assembly: hg19
+                super_population: [EAS]
+                health_status: 'true'
+                gender: female
+              variants:
+                with: [{chrom: 1, start: 10351, ref: "", alt: "A"}]
+              target_variant:
+                id: rs367896724
       responses:
         '200':
           description: >-
@@ -160,7 +182,7 @@ paths:
       description: >-
         The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
 
-        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 333 individuals, and ~45 minutes above such number.
+        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.
       requestBody:
         required: true
         content:
@@ -169,6 +191,7 @@ paths:
               type: object
               required:
                 - meta
+                - variants
               properties:
                 meta:
                   $ref: '#/components/schemas/FilterMetadata'
@@ -183,6 +206,18 @@ paths:
                     limit:
                       type: integer
                       example: 10
+            example:
+              filter_output:
+                limit: 5
+                max_frequency: 0.998
+              meta:
+                assembly: hg19
+                population: [BEB]
+                health_status: 'true'
+                gender: female
+              variants:
+                with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
+
       responses:
         '200':
           description: >-
@@ -219,7 +254,7 @@ paths:
       description: >-
         The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
 
-        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 333 individuals, and ~45 minutes above such number.
+        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.
       requestBody:
         required: true
         content:
@@ -228,6 +263,7 @@ paths:
               type: object
               required:
                 - meta
+                - variants
               properties:
                 meta:
                   $ref: '#/components/schemas/FilterMetadata'
@@ -242,6 +278,17 @@ paths:
                     limit:
                       type: integer
                       example: 10
+            example:
+              filter_output:
+                limit: 5
+                min_frequency: 0.0099
+              meta:
+                assembly: hg19
+                population: [BEB]
+                health_status: 'true'
+                gender: female
+              variants:
+                with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
 
       responses:
         '200':
@@ -279,8 +326,6 @@ components:
           type: string
       required:
         - id
-      example:
-        id: rs642251
 
     VariantCoordinates:
       type: object
@@ -298,11 +343,6 @@ components:
         - start
         - ref
         - alt
-      example:
-        chrom: 1
-        start: 176541
-        ref: G
-        alt: C
 
     Variant:
       oneOf:
