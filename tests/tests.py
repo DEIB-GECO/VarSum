@@ -9,7 +9,8 @@ if __name__ == '__main__':
     import sys
     db_user = sys.argv[1]
     db_password = sys.argv[2]
-    database.config_db_engine_for_tests(db_user, db_password)
+    db_port = sys.argv[3]
+    database.config_db_engine_for_tests(db_user, db_password, db_port)
 
 # these two are on different chromosome copies
 mut1 = Mutation(_id='rs367896724')

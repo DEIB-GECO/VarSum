@@ -156,17 +156,6 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
 
-    select_from_source_output = [
-        column(Vocabulary.CHROM.name),
-        column(Vocabulary.START.name),
-        column(Vocabulary.REF.name),
-        column(Vocabulary.ALT.name),
-        column(Vocabulary.POPULATION_SIZE.name),
-        column(Vocabulary.POSITIVE_DONORS.name),
-        column(Vocabulary.OCCURRENCE.name).label('OCCURRENCE_OF_VARIANT'),
-        column(Vocabulary.FREQUENCY.name).label('FREQUENCY_OF_VARIANT')
-    ]
-
     source_fatal_errors = dict()
 
     def ask_to_source(source: Type[Source]):
@@ -177,7 +166,16 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
                 source_stmt = obj.most_common_variant(connection, meta_attrs, region_attrs, out_max_freq, limit_result)\
                     .alias(source.__name__)
                 return \
-                    select(select_from_source_output) \
+                    select([
+                        column(Vocabulary.CHROM.name),
+                        column(Vocabulary.START.name),
+                        column(Vocabulary.REF.name),
+                        column(Vocabulary.ALT.name),
+                        column(Vocabulary.POPULATION_SIZE.name),
+                        column(Vocabulary.POSITIVE_DONORS.name),
+                        column(Vocabulary.OCCURRENCE.name),
+                        column(Vocabulary.FREQUENCY.name)
+                    ]) \
                     .select_from(source_stmt)
             return database.try_py_function(most_common_var_from_source)
         return try_and_catch(do, None)
@@ -192,7 +190,16 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
         return None
     else:
         stmt = \
-            select(select_from_source_output) \
+            select([
+                column(Vocabulary.CHROM.name),
+                column(Vocabulary.START.name),
+                column(Vocabulary.REF.name),
+                column(Vocabulary.ALT.name),
+                column(Vocabulary.POPULATION_SIZE.name),
+                column(Vocabulary.POSITIVE_DONORS.name),
+                column(Vocabulary.OCCURRENCE.name).label('OCCURRENCE_OF_VARIANT'),
+                column(Vocabulary.FREQUENCY.name).label('FREQUENCY_OF_VARIANT')
+            ]) \
             .select_from(union(*from_sources).alias('all_sources')) \
             .order_by(desc(column(Vocabulary.FREQUENCY.name)), desc(column(Vocabulary.OCCURRENCE.name)))
 
@@ -210,17 +217,6 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
 
-    select_from_source_output = [
-        column(Vocabulary.CHROM.name),
-        column(Vocabulary.START.name),
-        column(Vocabulary.REF.name),
-        column(Vocabulary.ALT.name),
-        column(Vocabulary.POPULATION_SIZE.name),
-        column(Vocabulary.POSITIVE_DONORS.name),
-        column(Vocabulary.OCCURRENCE.name),
-        column(Vocabulary.FREQUENCY.name)
-    ]
-
     source_fatal_errors = dict()
 
     def ask_to_source(source: Type[Source]):
@@ -231,7 +227,16 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
                 source_stmt = obj.rarest_variant(connection, meta_attrs, region_attrs, out_min_freq, limit_result)\
                     .alias(source.__name__)
                 return \
-                    select(select_from_source_output) \
+                    select([
+                        column(Vocabulary.CHROM.name),
+                        column(Vocabulary.START.name),
+                        column(Vocabulary.REF.name),
+                        column(Vocabulary.ALT.name),
+                        column(Vocabulary.POPULATION_SIZE.name),
+                        column(Vocabulary.POSITIVE_DONORS.name),
+                        column(Vocabulary.OCCURRENCE.name),
+                        column(Vocabulary.FREQUENCY.name)
+                    ]) \
                     .select_from(source_stmt)
 
             return database.try_py_function(rarest_var_from_source)
@@ -247,7 +252,16 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
         return None
     else:
         stmt = \
-            select(['*']) \
+            select([
+                column(Vocabulary.CHROM.name),
+                column(Vocabulary.START.name),
+                column(Vocabulary.REF.name),
+                column(Vocabulary.ALT.name),
+                column(Vocabulary.POPULATION_SIZE.name),
+                column(Vocabulary.POSITIVE_DONORS.name),
+                column(Vocabulary.OCCURRENCE.name).label('OCCURRENCE_OF_VARIANT'),
+                column(Vocabulary.FREQUENCY.name).label('FREQUENCY_OF_VARIANT')
+            ]) \
             .select_from(union(*from_sources).alias('all_sources')) \
             .order_by(asc(column(Vocabulary.FREQUENCY.name)), asc(column(Vocabulary.OCCURRENCE.name)))
 

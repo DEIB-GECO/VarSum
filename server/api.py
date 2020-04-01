@@ -8,7 +8,7 @@ from loguru import logger
 
 
 class ReqParamKeys:
-    META = 'meta'
+    META = 'having_meta'
     GENDER = 'gender'
     HEALTH_STATUS = 'health_status'
     DNA_SOURCE = 'dna_source'
@@ -16,7 +16,7 @@ class ReqParamKeys:
     POPULATION_CODE = 'population'
     SUPER_POPULATION_CODE = 'super_population'
 
-    VARIANTS = 'variants'
+    VARIANTS = 'having_variants'
     WITH_VARIANTS = 'with'
     WITH_VARS_ON_SAME_CHROM_COPY = 'on_same_chrom_copy'
     WITH_VARS_ON_DIFF_CHROM_COPY = 'on_diff_chrom_copy'
@@ -51,10 +51,12 @@ def donor_distribution(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.donor_distribution(params[2], params[0], params[1])
-        print('response contains {} rows'.format(result.rowcount))
-        marshalled = result_proxy_as_dict(result)
-        print_output_table(marshalled)
-        return marshalled
+        if result is not None:
+            # print('response contains {} rows'.format(result.rowcount))
+            marshalled = result_proxy_as_dict(result)
+            return marshalled
+        else:
+            return service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -62,9 +64,12 @@ def variant_distribution(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.variant_distribution(params[2], params[0], params[1], params[3])
-        print('response contains {} rows'.format(result.rowcount))
-        marshalled = result_proxy_as_dict(result)
-        return marshalled
+        if result is not None:
+            # print('response contains {} rows'.format(result.rowcount))
+            marshalled = result_proxy_as_dict(result)
+            return marshalled
+        else:
+            return service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -72,9 +77,12 @@ def most_common_variants(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.most_common_variants(params[0], params[1], params[6], params[5])
-        print('response contains {} rows'.format(result.rowcount))
-        marshalled = result_proxy_as_dict(result)
-        return marshalled
+        if result is not None:
+            # print('response contains {} rows'.format(result.rowcount))
+            marshalled = result_proxy_as_dict(result)
+            return marshalled
+        else:
+            return service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -82,9 +90,12 @@ def rarest_variants(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.rarest_variants(params[0], params[1], params[4], params[5])
-        print('response contains {} rows'.format(result.rowcount))
-        marshalled = result_proxy_as_dict(result)
-        return marshalled
+        if result is not None:
+            # print('response contains {} rows'.format(result.rowcount))
+            marshalled = result_proxy_as_dict(result)
+            return marshalled
+        else:
+            return service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -171,6 +182,8 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.DNA_SOURCE
     elif name == ReqParamKeys.HEALTH_STATUS:
         return Vocabulary.HEALTH_STATUS
+    elif name == ReqParamKeys.ASSEMBLY:
+        return Vocabulary.ASSEMBLY
     else:
         logger.info('name without a match in Vocabulary')
         return None
@@ -229,7 +242,8 @@ if __name__ == '__main__':
     from database import database
     db_user = sys.argv[1]
     db_password = sys.argv[2]
-    database.config_db_engine_parameters(flask_app, db_user, db_password)
+    db_port = sys.argv[3]
+    database.config_db_engine_parameters(flask_app, db_user, db_password, db_port)
 
 
 # def are_mutations_unique_between_filter_groups(regions: dict) -> bool:

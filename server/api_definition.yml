@@ -11,8 +11,7 @@ servers:
 paths:
   /values/{attribute}:
     summary: >-
-      The set of values that can be specified
-      in the body request of the other endpoints (mutation excluded)
+      The set of values that can be used for a given attribute.
     get:
       summary: Returns the set of values available for the given attribute
       operationId: server.api.values
@@ -20,12 +19,12 @@ paths:
         - name: attribute
           in: path
           required: true
-          description: A comma separated list of the attributes for which one wants to know the values.
+          description: The name of the attribute of which you want to know the values.
           explode: false
           style: simple
           schema:
             type: string
-            enum: [assembly, gender, population, super_population, dna_source]
+            enum: [assembly, gender, population, super_population, dna_source, health_status]
       responses:
         '200':
           description: >-
@@ -55,7 +54,7 @@ paths:
       summary: >
         Returns the distribution of the individuals inside a population having the requested characteristics.
       description: >
-        Given a set of characteristics (parameters "meta" and "variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "by_attributes".
+        Given a set of characteristics (parameters "having_meta" and "having_variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "by_attributes".
       requestBody:
         required: true
         content:
@@ -63,14 +62,24 @@ paths:
             schema:
               type: object
               required:
-                - meta
+                - having_meta
+                - distribute_by
               properties:
                 distribute_by:
                   $ref: '#/components/schemas/DistributeBy'
-                meta:
+                having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
-                variants:
+                having_variants:
                   $ref: '#/components/schemas/FilterVariants'
+            example:
+              distribute_by: [gender]
+              having_meta:
+                assembly: hg19
+                super_population: [EAS]
+                health_status: 'true'
+              having_variants:
+                with: [id: rs367896724]
+
       responses:
         '200':
           description: >-
@@ -105,7 +114,7 @@ paths:
       summary: >
         Returns the distribution of a variant inside a population having the required characteristics.
       description: >
-        Describes the distribution of a "target_variant" inside the set of individuals having the characteristics in "meta" and "variants". The distribution is shown by the attributes given in "distribute_by", and for each group of individuals, it is returned the number of individuals inside the group, the number of occurrences and the frequency of the variant.
+        Describes the distribution of a "target_variant" inside the set of individuals having the characteristics in "having_meta" and "having_variants". The distribution is shown by the attributes given in "distribute_by", and for each group of individuals, it is returned the number of individuals inside the group, the number of occurrences and the frequency of the variant.
       requestBody:
         required: true
         content:
@@ -113,17 +122,29 @@ paths:
             schema:
               type: object
               required:
-                - meta
+                - having_meta
+                - distribute_by
                 - target_variant
               properties:
                 distribute_by:
                   $ref: '#/components/schemas/DistributeBy'
-                meta:
+                having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
-                variants:
+                having_variants:
                   $ref: '#/components/schemas/FilterVariants'
                 target_variant:
                   $ref: '#/components/schemas/Variant'
+            example:
+              distribute_by: [population]
+              having_meta:
+                assembly: hg19
+                super_population: [EAS]
+                health_status: 'true'
+                gender: female
+              having_variants:
+                with: [{chrom: 1, start: 10351, ref: "", alt: "A"}]
+              target_variant:
+                id: rs367896724
       responses:
         '200':
           description: >-
@@ -158,9 +179,9 @@ paths:
       summary: >-
         Returns a list of the most common variants inside the selected population.
       description: >-
-        The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
+        The given parameters "having_meta" and "having_variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
 
-        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 333 individuals, and ~45 minutes above such number.
+        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.
       requestBody:
         required: true
         content:
@@ -168,11 +189,12 @@ paths:
             schema:
               type: object
               required:
-                - meta
+                - having_meta
+                - having_variants
               properties:
-                meta:
+                having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
-                variants:
+                having_variants:
                   $ref: '#/components/schemas/FilterVariants'
                 filter_output:
                   type: object
@@ -183,6 +205,18 @@ paths:
                     limit:
                       type: integer
                       example: 10
+            example:
+              filter_output:
+                limit: 5
+                max_frequency: 0.998
+              having_meta:
+                assembly: hg19
+                population: [BEB]
+                health_status: 'true'
+                gender: female
+              having_variants:
+                with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
+
       responses:
         '200':
           description: >-
@@ -217,9 +251,9 @@ paths:
       summary: >-
         Returns a list of the rarest variants inside the selected population.
       description: >-
-        The given parameters "meta" and "variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
+        The given parameters "having_meta" and "having_variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
 
-        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 333 individuals, and ~45 minutes above such number.
+        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.
       requestBody:
         required: true
         content:
@@ -227,11 +261,12 @@ paths:
             schema:
               type: object
               required:
-                - meta
+                - having_meta
+                - having_variants
               properties:
-                meta:
+                having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
-                variants:
+                having_variants:
                   $ref: '#/components/schemas/FilterVariants'
                 filter_output:
                   type: object
@@ -242,6 +277,17 @@ paths:
                     limit:
                       type: integer
                       example: 10
+            example:
+              filter_output:
+                limit: 5
+                min_frequency: 0.0099
+              having_meta:
+                assembly: hg19
+                population: [BEB]
+                health_status: 'true'
+                gender: female
+              having_variants:
+                with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
 
       responses:
         '200':
@@ -279,8 +325,6 @@ components:
           type: string
       required:
         - id
-      example:
-        id: rs642251
 
     VariantCoordinates:
       type: object
@@ -298,11 +342,6 @@ components:
         - start
         - ref
         - alt
-      example:
-        chrom: 1
-        start: 176541
-        ref: G
-        alt: C
 
     Variant:
       oneOf:
