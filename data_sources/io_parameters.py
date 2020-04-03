@@ -23,23 +23,32 @@ class Mutation:
         self.ref = ref
         self.alt = alt
 
-    @staticmethod
-    def from_dict(mutation_dict: dict):
-        if mutation_dict.get('id') is not None:
-            return Mutation(_id=mutation_dict['id'])
-        elif mutation_dict.get('chrom') is not None \
-                and mutation_dict.get('start') is not None \
-                and mutation_dict.get('ref') is not None \
-                and mutation_dict.get('alt') is not None:
-            return Mutation(chrom=mutation_dict['chrom'], start=mutation_dict['start'], ref=mutation_dict['ref'], alt=mutation_dict['alt'])
-        else:
-            raise VariantUndefined("Cannot identify Mutation. One between ID and (chrom, start, ref, alt) must be provided. "
-                                   f"Input was: ID {mutation_dict.get('id')} CHROM {mutation_dict.get('chrom')} "
-                                   f" START {mutation_dict.get('start')} REF {mutation_dict.get('ref')} "
-                                   f"ALT {mutation_dict.get('alt')}")
+    def __str__(self):
+        return f'Mutation ID {self.id} COORDINATES {self.chrom}-{self.start}-{self.ref}-{self.alt}'
 
 
 class VariantUndefined(Exception):
+    pass
+
+
+class GenomicInterval:
+    def __init__(self, chrom: int, start: int, stop: int, strand: Optional[int] = None):
+        if strand is not None and not (strand == 1 or strand == -1):
+            raise GenomicIntervalUndefined('strand accepts only the values 1, -1 and None')
+        if chrom is None or start is None or stop is None:
+            raise GenomicIntervalUndefined('GenomicInterval needs at least the attributes chrom, start, stop '
+                                           f'to have non-null values. Instead {str(chrom)}, {str(start)}, {str(stop)} '
+                                           'were received.')
+        self.chrom = chrom
+        self.start = start
+        self.stop = stop
+        self.strand = strand
+
+    def __str__(self):
+        return f'GenomicInterval {self.chrom}:{self.start}-{self.stop} {self.strand}'
+
+
+class GenomicIntervalUndefined(Exception):
     pass
 
 
@@ -171,11 +180,24 @@ class Vocabulary(Enum):
     POPULATION_SIZE = 204
     POSITIVE_DONORS = 205
 
-    # identifiers of a variation
+    # identifiers of a region
     CHROM = 401
     START = 402
-    REF = 403
-    ALT = 404
+    STOP = 403
+    STRAND = 404
+    LENGTH = 405
+
+    # identifiers specific to variation data
+    REF = 501
+    ALT = 502
+    ID = 503
+    VAR_TYPE = 504
+    QUALITY = 505
+    FILTER = 506
+
+    # identifiers specific to genes
+    GENE_NAME = 601
+    GENE_TYPE = 602
 
     # special values
     unknown = 301

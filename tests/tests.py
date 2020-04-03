@@ -1,6 +1,4 @@
 from data_sources.io_parameters import *
-import data_sources.coordinator as coordinator
-from typing import Optional
 import database.db_utils as db_utils
 
 
@@ -148,19 +146,98 @@ something_else = MetadataAttrs(something_else='bla')
 # region = io_param.RegionAttrs(with_variants=['a'], with_variants_same_c_copy=['a'], with_variants_diff_c_copy=['a'])
 
 by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
-# import data_sources.kgenomes.kgenomes as kgenomes
-# import database.database as database
-#
-# source = kgenomes.KGenomes()
-#
-#
-# def tr(connection):
-#     stmt = source.most_common_mut_in_sample_set(connection, hg19_healthy_female_BEB, RegionAttrs([mut4_al1], None, [mut1, mut2_fingerprint]))
-#     # result = connection.execute(stmt)
-#     # db_utils.print_query_result(result)
-#
-#
-# database.try_py_function(tr)
+
+def test_disable_seqscan_and_connection_recycle():
+    connection = database.check_and_get_connection()
+    try:
+        # print('changing seqscan')
+        # connection.execute('SET SESSION enable_seqscan=false')
+        # print('show seqscan')
+        # seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+        # print(seqscan_value)
+        print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+        seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+        print('seqscan ', seqscan_value)
+        connection.execute('SET SESSION enable_seqscan=false')
+        seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+        print('seqscan ', seqscan_value)
+        print('invalidate connection')
+        connection.invalidate()
+        print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+    finally:
+        connection.close()
+
+    print('connection invalidated and closed')
+    print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+    print('get a new connection')
+    connection = database.check_and_get_connection()
+    seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
+    print('seqscan ', seqscan_value)
+    print('close it')
+    connection.close()
+    print(f'POOL STATUS {str(database.db_engine.pool.status())}')
+
+def kgenomes_most_common_var_without_coordinator():
+    import data_sources.kgenomes.kgenomes as kgenomes
+    import database.database as database
+    source = kgenomes.KGenomes()
+
+    def do(connection):
+        stmt = source.most_common_variant(connection, hg19_healthy_female_BEB,
+                                          RegionAttrs([mut4_al1], None, [mut1, mut2_fingerprint]),
+                                          out_max_freq=None, limit_result=10)
+        result = connection.execute(stmt)
+        db_utils.print_query_result(result)
+    database.try_py_function(do)
+
+def gencode_annotate_region_without_coordinator():
+    import data_sources.gencode_v19_hg19.gencode_v19_hg19 as gencode
+    import database.database as database
+    source = gencode.GencodeV19HG19()
+
+    def do(connection):
+        stmt = source.annotate(connection, 1, 55516870, 55516870, None, None)
+        result = connection.execute(stmt)
+        print(f'result contains {result.rowcount} records')
+        db_utils.print_query_result(result)
+    database.try_py_function(do)
+
+
+def variant_details_without_coordinator():
+    import data_sources.kgenomes.kgenomes as kgenomes
+    import database.database as database
+    source = kgenomes.KGenomes()
+    ask_for = [
+        Vocabulary.CHROM,
+        Vocabulary.START,
+        Vocabulary.STOP,
+        Vocabulary.STRAND,
+        Vocabulary.ID,
+        Vocabulary.LENGTH,
+        Vocabulary.REF,
+        Vocabulary.ALT,
+        Vocabulary.VAR_TYPE,
+        Vocabulary.FILTER,
+        Vocabulary.QUALITY
+    ]
+
+    def do(connection):
+        res = source.get_variant_details(connection, mut1, ask_for)
+        print(res)
+    database.try_py_function(do)
+
+
+def gencode_find_gene_without_coordinator():
+    import data_sources.gencode_v19_hg19.gencode_v19_hg19 as gencode
+    import database.database as database
+    source = gencode.GencodeV19HG19()
+
+    def do(connection):
+        stmt = source.find_gene_region(connection, 'OR4F5', None)
+        result = connection.execute(stmt)
+        print(f'result contains {result.rowcount} records')
+        db_utils.print_query_result(result)
+    database.try_py_function(do)
 
 # result_proxy = coordinator.donor_distribution(by_attributes, hg19_healthy_female_BEB, None)
 # result_proxy = coordinator.donor_distribution([Vocabulary.SUPER_POPULATION], MetadataAttrs(assembly='hg19', super_population=['AFR', 'SAS']), None)
@@ -171,33 +248,3 @@ by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
 # result_proxy = coordinator.most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
 # db_utils.print_query_result(result_proxy)
 # print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
-
-
-connection = database.check_and_get_connection()
-try:
-    # print('changing seqscan')
-    # connection.execute('SET SESSION enable_seqscan=false')
-    # print('show seqscan')
-    # seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
-    # print(seqscan_value)
-    print(f'POOL STATUS {str(database.db_engine.pool.status())}')
-    seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
-    print('seqscan ', seqscan_value)
-    connection.execute('SET SESSION enable_seqscan=false')
-    seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
-    print('seqscan ', seqscan_value)
-    print('invalidate connection')
-    connection.invalidate()
-    print(f'POOL STATUS {str(database.db_engine.pool.status())}')
-finally:
-    connection.close()
-
-print('connection invalidated and closed')
-print(f'POOL STATUS {str(database.db_engine.pool.status())}')
-print('get a new connection')
-connection = database.check_and_get_connection()
-seqscan_value = connection.execute('SHOW enable_seqscan').scalar()
-print('seqscan ', seqscan_value)
-print('close it')
-connection.close()
-print(f'POOL STATUS {str(database.db_engine.pool.status())}')

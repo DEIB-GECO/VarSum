@@ -220,7 +220,7 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names, which include the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
           content:
             application/json:
               schema:
@@ -292,7 +292,7 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names, which include the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
           content:
             application/json:
               schema:
@@ -315,6 +315,64 @@ paths:
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
         '503':
           description: Internal server error.
+
+
+  /annotate:
+    post:
+      operationId: server.api.annotate
+      summary: >-
+        Returns the list of genes overlapping - even only partially - with a genomic region or variant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Variant'
+                - $ref: '#/components/schemas/GenomicInterval'
+            examples:
+              variant_coordinates:
+                value:
+                  chrom: 1
+                  start: 13271
+                  ref: "G"
+                  alt: "C"
+              variant_id:
+                value:
+                  id: rs367896724
+              genomic_interval:
+                value:
+                  chrom: 1
+                  start: 29500
+                  stop: 50000
+
+      responses:
+        '200':
+          description: >-
+            A table represented as a JSON object. The item ("columns") is an array of the table column names: chromosome, start, stop, strand, gene name and gene type. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columns:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+              example:
+                columns: ['CHROM', 'START', 'STOP', 'STRAND', 'GENE_NAME', 'GENE_TYPE']
+                rows: [[1, 29553, 31109, 1, 'MIR1302-11', 'lincRNA'], [1, 34553, 46081, -1, 'FAM138A', 'lincRNA']]
+        '400':
+          description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '503':
+          description: Internal server error.
+
 
 components:
   schemas:
@@ -407,3 +465,20 @@ components:
       items:
         type: string
         enum: [gender, population, super_population, dna_source, health_status]
+
+    GenomicInterval:
+      type: object
+      properties:
+        chrom:
+          type: integer
+        start:
+          type: integer
+        stop:
+          type: integer
+        strand:
+          type: integer
+          enum: [1, -1]
+      required:
+        - chrom
+        - start
+        - stop

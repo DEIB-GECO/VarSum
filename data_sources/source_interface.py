@@ -54,6 +54,9 @@ class Source:
     def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "values_of_attribute".')
 
+    def get_variant_details(self, connection, variant: Mutation, which_details: List[Vocabulary]) -> list:
+        raise NotImplementedError('Any subclass of Source must implement the abstract method "get_variant_details".')
+
     @classmethod
     def can_express_constraint(cls, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, method=None):
         if len(cls.meta_col_map) == 0 or len(cls.avail_region_constraints) == 0:

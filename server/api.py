@@ -8,6 +8,9 @@ from loguru import logger
 
 
 class ReqParamKeys:
+    """
+    This class contains the macro categories of the
+    """
     META = 'having_meta'
     GENDER = 'gender'
     HEALTH_STATUS = 'health_status'
@@ -29,6 +32,14 @@ class ReqParamKeys:
     BY_ATTRIBUTES = 'distribute_by'
 
     TARGET_VARIANT = 'target_variant'
+
+    CHROM = 'chrom'
+    START = 'start'
+    STOP = 'stop'
+    STRAND = 'strand'
+    VAR_ID = 'id'
+    REF = 'ref'
+    ALT = 'alt'
 
 
 connexion_app = connexion.App(__name__, specification_dir='./')  # internally it starts flask
@@ -110,6 +121,31 @@ def values(attribute):
     return try_and_catch(go)
 
 
+def annotate(body):
+    with_annotations = [
+        Vocabulary.CHROM,
+        Vocabulary.START,
+        Vocabulary.STOP,
+        Vocabulary.STRAND,
+        Vocabulary.GENE_NAME,
+        Vocabulary.GENE_TYPE
+    ]
+
+    def go():
+        if body.get(ReqParamKeys.STOP):
+            interval = parse_genomic_interval_from_dict(body)
+            result = coordinator.annotate_interval(interval, with_annotations)
+        else:
+            variant = parse_variant_from_dict(body)
+            result = coordinator.annotate_variant(variant, with_annotations)
+        if result is not None:
+            marshalled = result_proxy_as_dict(result)
+            return marshalled
+        else:
+            return service_unavailable_message()
+    return try_and_catch(go)
+
+
 @connexion_app.route(base_path)
 def home():
     # redirect to base_path + api_doc_relative_path
@@ -144,7 +180,7 @@ def prepare_body_parameters(body):
 
     target_variant = body.get(ReqParamKeys.TARGET_VARIANT)
     if target_variant is not None:
-        target_variant = parse_to_mutation_array([target_variant])[0]
+        target_variant = parse_variant_from_dict(target_variant)
 
     out_limit = None
     out_min_frequency = None
@@ -168,7 +204,24 @@ def parse_to_mutation_array(dict_array_of_mutations):
     if dict_array_of_mutations is None or len(dict_array_of_mutations) == 0:
         return None
     else:
-        return [Mutation.from_dict(a_dict) for a_dict in dict_array_of_mutations]
+        return [parse_variant_from_dict(a_dict) for a_dict in dict_array_of_mutations]
+
+
+def parse_variant_from_dict(mutation_dict: dict):
+    if mutation_dict.get(ReqParamKeys.VAR_ID) is not None:
+        return Mutation(_id=mutation_dict[ReqParamKeys.VAR_ID])
+    else:
+        return Mutation(mutation_dict.get(ReqParamKeys.CHROM),
+                        mutation_dict.get(ReqParamKeys.START),
+                        mutation_dict.get(ReqParamKeys.REF),
+                        mutation_dict.get(ReqParamKeys.ALT))
+
+
+def parse_genomic_interval_from_dict(region_dict: dict):
+    return GenomicInterval(region_dict.get(ReqParamKeys.CHROM),
+                           region_dict.get(ReqParamKeys.START),
+                           region_dict.get(ReqParamKeys.STOP),
+                           region_dict.get(ReqParamKeys.STRAND))
 
 
 def parse_name_to_vocabulary(name: str):
@@ -211,6 +264,9 @@ def try_and_catch(function, *args, **kwargs):
     except VariantUndefined as e:
         logger.info(repr(e))
         return bad_variant_parameters(repr(e))
+    except GenomicIntervalUndefined as e:
+        logger.info(repr(e))
+        return bad_genomic_interval_parameters(repr(e))
     except Exception as e:
         logger.exception(e)
         return service_unavailable_message()
@@ -233,6 +289,11 @@ def bad_request_message():
 
 def bad_variant_parameters(msg: str):
     return 'One or more variants included in the request miss required attributes or contain misspells. ' \
+           f'Detailed message: {msg}', 400, {'x-error': 'Cannot answer to this request'}
+
+
+def bad_genomic_interval_parameters(msg: str):
+    return 'One or more genomic intervals included in the request miss required attributes or contain misspells. ' \
            f'Detailed message: {msg}', 400, {'x-error': 'Cannot answer to this request'}
 
 

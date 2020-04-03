@@ -1,8 +1,10 @@
+from data_sources.annot_interface import AnnotInterface
 from data_sources.source_interface import *
 from data_sources.kgenomes.kgenomes import KGenomes
+from data_sources.gencode_v19_hg19.gencode_v19_hg19 import GencodeV19HG19
 from typing import List, Type
 from sqlalchemy.engine import ResultProxy
-from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc
+from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc, literal_column, text
 import sqlalchemy.exc
 import database.db_utils as db_utils
 import database.database as database
@@ -13,6 +15,9 @@ import itertools
 
 _sources: List[Type[Source]] = [
     KGenomes
+]
+_annotation_sources: List[Type[AnnotInterface]] = [
+    GencodeV19HG19
 ]
 
 LOG_SQL_STATEMENTS = True
@@ -151,7 +156,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
         return database.try_py_function(compute_result)
 
 
-def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: float = None, limit_result: int = 10) -> Optional[ResultProxy]:
+def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10) -> Optional[ResultProxy]:
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
@@ -212,7 +217,7 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
         return database.try_py_function(compute_result)
 
 
-def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: float, limit_result: int = 10) -> Optional[ResultProxy]:
+def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> Optional[ResultProxy]:
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
@@ -301,10 +306,100 @@ def values_of_attribute(attribute: Vocabulary) -> Optional[List]:
         return list(itertools.chain.from_iterable(from_sources))
 
 
+def annotate_variant(variant: Mutation, annot_types: List[Vocabulary]) -> Optional[ResultProxy]:
+    region_of_variant = get_region_of_variant(variant)
+    if region_of_variant is None:
+        logger.debug(f'The variant {str(variant)} is not present in our genomic variant sources.')
+        return None
+    else:
+        return annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types)
+
+
+def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]) -> Optional[ResultProxy]:
+    which_annotations = set(annot_types)
+    eligible_sources = [_source for _source in _annotation_sources
+                        if not which_annotations.isdisjoint(_source.get_available_annotation_types())]
+
+    def ask_to_source(source):
+        def do():
+            obj: AnnotInterface = source()
+            available_annot_in_source = obj.get_available_annotation_types()
+
+            select_from_source_output = []  # what we select from the source output (both available and unavailable attributes)
+            selectable_attributes: List[Vocabulary] = []  # what we can ask to the source to give us
+            for elem in annot_types:
+                if elem in available_annot_in_source:
+                    selectable_attributes.append(elem)
+                    select_from_source_output.append(column(elem.name))
+                else:
+                    select_from_source_output.append(
+                        cast(literal(Vocabulary.unknown.name), types.String).label(elem.name))
+
+            def annotate_region(connection: Connection):
+                source_stmt = obj.annotate(connection, interval, selectable_attributes).alias(source.__name__)
+                return \
+                    select(select_from_source_output)\
+                    .select_from(source_stmt)
+
+            return database.try_py_function(annotate_region)
+        return try_and_catch(do, None)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
+        from_sources = executor.map(ask_to_source, eligible_sources)
+
+    # remove failures
+    from_sources = [result for result in from_sources if result is not None]
+    if len(from_sources) == 0:
+        logger.critical('Sources produced no data')
+        return None
+    else:
+        # aggregate the results of all the queries
+        annot_types_as_columns = [column(annot.name) for annot in annot_types]
+        stmt = \
+            select(['*']) \
+            .select_from(union(*from_sources).alias("all_sources")) \
+            .order_by(literal(1, types.Integer))
+
+        def compute_result(connection: Connection):
+            if LOG_SQL_STATEMENTS:
+                db_utils.show_stmt(connection, stmt, logger.debug, 'ANNOTATE GENOMIC INTERVAL')
+            result = connection.execute(stmt)
+            return result
+
+        return database.try_py_function(compute_result)
+
+
 def get_chromosome_of_variant(variant):
     def get_chrom(connection):
         return KGenomes().get_chrom_of_variant(connection, variant)
     return database.try_py_function(get_chrom)
+
+
+def get_region_of_variant(var: Mutation) -> Optional[list]:
+    # to the me of the future: I suggest you to not generalize this method. If you want to generalize it, then you must
+    # take care of merging the results coming from multiple sources. Here instead that problem is avoided because
+    # it returns only values that are assumed to be equal in all sources.
+    def ask_to_source(source):
+        def do():
+            obj: Source = source()
+
+            def get_region(connection):
+                return obj.get_variant_details(connection, var, [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP])
+            return database.try_py_function(get_region)
+        return try_and_catch(do, None)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
+        from_sources = executor.map(ask_to_source, _sources)
+
+    # remove failures
+    from_sources = [result for result in from_sources if result is not None and len(result) > 0]
+    if len(from_sources) == 0:
+        logger.debug('Sources produced no data')
+        return None
+    else:
+        # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
+        # they're equivalent
+        return from_sources[0]
 
 
 def try_and_catch(fun, alternative_return_value, *args, **kwargs):

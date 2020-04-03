@@ -41,6 +41,19 @@ class KGenomes(Source):
         Vocabulary.WITH_VARIANT_SAME_C_COPY,
         Vocabulary.WITH_VARIANT_DIFF_C_COPY
     }
+    region_col_map = {
+        Vocabulary.CHROM: 'chrom',
+        Vocabulary.START: 'start',
+        Vocabulary.STOP: 'stop',
+        Vocabulary.STRAND: 'strand',
+        Vocabulary.REF: 'ref',
+        Vocabulary.ALT: 'alt',
+        Vocabulary.LENGTH: 'length',
+        Vocabulary.VAR_TYPE: 'mut_type',
+        Vocabulary.ID: 'id',
+        Vocabulary.QUALITY: 'quality',
+        Vocabulary.FILTER: 'filter'
+    }
 
     log_sql_commands: bool = True
     
@@ -670,11 +683,43 @@ class KGenomes(Source):
             return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,
                          schema=default_schema_to_use_name)
 
-    @staticmethod
-    def get_chrom_of_variant(connection: Connection, variant: Mutation):
+    def get_chrom_of_variant(self, connection: Connection, variant: Mutation):
         if variant.chrom is not None:
             return variant.chrom
         else:
             global genomes
             chrom_query = select([genomes.c.chrom]).where(genomes.c.id == variant.id).limit(1)
             return connection.execute(chrom_query).fetchone().values()[0]
+
+    def get_variant_details(self, connection: Connection, variant: Mutation, which_details: List[Vocabulary]) -> list:
+        self.connection = connection
+        global genomes
+        select_columns = []
+        for att in which_details:
+            mapping = self.region_col_map.get(att)
+            if mapping is not None:
+                select_columns.append(genomes.c[mapping].label(att.name))
+            else:
+                select_columns.append(cast(literal(Vocabulary.unknown.name), types.String).label(att.name))
+
+        stmt = select(select_columns).distinct()
+        if variant.chrom is not None:
+            stmt = stmt.where((genomes.c.chrom == variant.chrom) &
+                              (genomes.c.start == variant.start) &
+                              (genomes.c.ref == variant.ref) &
+                              (genomes.c.alt == variant.alt))
+        else:
+            stmt = stmt.where(genomes.c.id == variant.id)
+        if self.log_sql_commands:
+            utils.show_stmt(connection, stmt, logger.debug, 'GET VARIANT DETAILS')
+        result = connection.execute(stmt)
+        if result.rowcount == 0:
+            return list()
+        else:
+            if result.rowcount > 1:
+                logger.error(f'user searched for variant: chrom {str(variant.chrom)}, start {str(variant)}, '
+                             f'ref {str(variant.ref)}, alt {str(variant.alt)}, id {str(variant.id)}'
+                             f'but two results were found')
+            final_result = result.fetchone().values()
+            result.close()
+            return final_result
