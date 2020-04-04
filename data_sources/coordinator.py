@@ -156,7 +156,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
         return database.try_py_function(compute_result)
 
 
-def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10) -> Optional[ResultProxy]:
+def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10) -> Optional[ResultProxy]:
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
