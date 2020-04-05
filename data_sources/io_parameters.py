@@ -15,7 +15,7 @@ class Mutation:
         """
         if (chrom is None or start is None or ref is None or alt is None) and _id is None:
             raise VariantUndefined(
-                "Cannot identify Mutation. One between ID and (chrom, start, ref, alt) must be provided. "
+                "Cannot identify the Variant. One between ID and (chrom, start, ref, alt) must be provided. "
                 f"Input was: ID {_id} CHROM {chrom} START {start} REF {ref} ALT {alt}")
         self.id = _id
         self.chrom = chrom
@@ -24,7 +24,7 @@ class Mutation:
         self.alt = alt
 
     def __str__(self):
-        return f'Mutation ID {self.id} COORDINATES {self.chrom}-{self.start}-{self.ref}-{self.alt}'
+        return f'Variant ID {self.id} COORDINATES {self.chrom}-{self.start}-{self.ref}-{self.alt}'
 
 
 class VariantUndefined(Exception):
@@ -34,11 +34,13 @@ class VariantUndefined(Exception):
 class GenomicInterval:
     def __init__(self, chrom: int, start: int, stop: int, strand: Optional[int] = None):
         if strand is not None and not (strand == 1 or strand == -1):
-            raise GenomicIntervalUndefined('strand accepts only the values 1, -1 and None')
+            raise GenomicIntervalUndefined('When present, the strand of a genomic interval can have only values 1 and -1')
         if chrom is None or start is None or stop is None:
-            raise GenomicIntervalUndefined('GenomicInterval needs at least the attributes chrom, start, stop '
+            raise GenomicIntervalUndefined('A genomic interval needs at least the attributes chrom, start, stop '
                                            f'to have non-null values. Instead {str(chrom)}, {str(start)}, {str(stop)} '
-                                           'were received.')
+                                           'were given.')
+        if start > stop:
+            raise GenomicIntervalUndefined('Your genomic interval has start coordinate > stop coordinate.')
         self.chrom = chrom
         self.start = start
         self.stop = stop

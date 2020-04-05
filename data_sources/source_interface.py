@@ -64,7 +64,7 @@ class Source:
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
                            output_region_attrs: List[Vocabulary]) -> FromClause:
-        raise NotImplementedError('Any subclass of Source must implement the abstract method "variants_in_region".')
+        raise NotImplementedError('Any subclass of Source must implement the abstract method "variants_in_genomic_interval".')
 
     @classmethod
     def can_express_constraint(cls, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, method=None):

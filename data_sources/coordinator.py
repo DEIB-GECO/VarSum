@@ -23,7 +23,7 @@ _annotation_sources: List[Type[AnnotInterface]] = [
 LOG_SQL_STATEMENTS = True
 
 
-def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Optional[ResultProxy]:
+def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -66,7 +66,7 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         # aggregate the results of all the queries
         by_attributes_as_columns = [column(att.name) for att in by_attributes]
@@ -84,10 +84,10 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
             result = connection.execute(stmt)
             return result
 
-        return database.try_py_function(compute_result)
+        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
-def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> Optional[ResultProxy]:
+def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation):
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -132,7 +132,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         by_attributes_as_columns = [column(att.name) for att in by_attributes]
 
@@ -153,10 +153,10 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
             result = connection.execute(stmt)
             return result
 
-        return database.try_py_function(compute_result)
+        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
-def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10) -> Optional[ResultProxy]:
+def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10):
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
@@ -192,7 +192,7 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         stmt = \
             select([
@@ -214,10 +214,10 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
             result = connection.execute(stmt)
             return result
 
-        return database.try_py_function(compute_result)
+        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
-def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> Optional[ResultProxy]:
+def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: Optional[float], limit_result: Optional[int] = 10):
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
@@ -254,7 +254,7 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         stmt = \
             select([
@@ -276,10 +276,10 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
             result = connection.execute(stmt)
             return result
 
-        return database.try_py_function(compute_result)
+        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
-def values_of_attribute(attribute: Vocabulary) -> Optional[List]:
+def values_of_attribute(attribute: Vocabulary):
     eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
 
     notices = list()
@@ -301,21 +301,22 @@ def values_of_attribute(attribute: Vocabulary) -> Optional[List]:
     from_sources = [result for result in from_sources if result]    # removes Nones and empty lists
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
-        return list(itertools.chain.from_iterable(from_sources))
+        return list(itertools.chain.from_iterable(from_sources)), 200
 
 
-def annotate_variant(variant: Mutation, annot_types: List[Vocabulary]) -> Optional[ResultProxy]:
+def annotate_variant(variant: Mutation, annot_types: List[Vocabulary]):
     region_of_variant = get_region_of_variant(variant)
     if region_of_variant is None:
-        logger.debug(f'The variant {str(variant)} is not present in our genomic variant sources.')
-        return None
+        error_msg = f'The variant {str(variant)} is not present in our genomic variant sources.'
+        logger.debug(error_msg)
+        return error_msg, 404
     else:
         return annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types)
 
 
-def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]) -> Optional[ResultProxy]:
+def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]):
     which_annotations = set(annot_types)
     eligible_sources = [_source for _source in _annotation_sources
                         if not which_annotations.isdisjoint(_source.get_available_annotation_types())]
@@ -351,7 +352,7 @@ def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]) 
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         # aggregate the results of all the queries
         annot_types_as_columns = [column(annot.name) for annot in annot_types]
@@ -366,10 +367,10 @@ def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]) 
             result = connection.execute(stmt)
             return result
 
-        return database.try_py_function(compute_result)
+        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
-def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Optional[str]) -> Optional[ResultProxy]:
+def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Optional[str]):
     select_from_sources = [
         Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
     ]
@@ -394,7 +395,7 @@ def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Opti
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         merge_regions = \
             select(['*']) \
@@ -404,21 +405,20 @@ def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Opti
             if LOG_SQL_STATEMENTS:
                 db_utils.show_stmt(connection, merge_regions, logger.debug, 'FIND GENE')
             return connection.execute(merge_regions)
-        region_of_gene_cursor = database.try_py_function(compute_region)
+        region_of_gene = database.try_py_function(compute_region)
 
-        # db_utils.print_query_result(region_of_gene_cursor)
-        # return None
-        row_proxy = region_of_gene_cursor.fetchone()
-        if region_of_gene_cursor.fetchone() is not None:
-            region_of_gene_cursor.close()
-            raise ValueError('multiple regions match the entry gene data')
+        result = result_proxy_as_dict(region_of_gene)
+        if len(result['rows']) > 1:
+            result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
+            return result, 300
+        elif len(result['rows']) == 0:
+            return 'No record in our database corresponds to the given gene parameters.', 404
         else:
-            first_row = row_proxy.values()
-            region_of_gene_cursor.close()
-            return variants_in_region(GenomicInterval(first_row[1], first_row[2], first_row[3], strand=None))
+            genomic_interval = result['rows'][0]
+            return variants_in_genomic_interval(GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None))
 
 
-def variants_in_region(interval: GenomicInterval) -> Optional[ResultProxy]:
+def variants_in_genomic_interval(interval: GenomicInterval):
     eligible_sources = _sources
     select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
 
@@ -439,7 +439,7 @@ def variants_in_region(interval: GenomicInterval) -> Optional[ResultProxy]:
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
         logger.critical('Sources produced no data')
-        return None
+        return 'Internal server error', 503
     else:
         # no need for select distinct as the union does that already
         stmt = \
@@ -453,10 +453,17 @@ def variants_in_region(interval: GenomicInterval) -> Optional[ResultProxy]:
             result = connection.execute(stmt)
             return result
 
-        return database.try_py_function(compute_result)
+        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
 #   HELPER METHODS  #
+def result_proxy_as_dict(result_proxy):
+    return {
+            'columns': result_proxy.keys(),
+            'rows': [row.values() for row in result_proxy.fetchall()]
+        }
+    
+
 def get_chromosome_of_variant(variant):
     def get_chrom(connection):
         return KGenomes().get_chrom_of_variant(connection, variant)

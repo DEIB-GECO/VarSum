@@ -51,6 +51,7 @@ flask_app = connexion_app.app
 base_path = '/popstudy/'
 api_doc_relative_path = 'api/ui/'
 
+
 def run():
     # do this only after the declaration of the api endpoint handlers
     connexion_app.add_api('api_definition.yml')  # <- yml located inside the specification dir
@@ -66,12 +67,7 @@ def donor_distribution(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.donor_distribution(params[2], params[0], params[1])
-        if result is not None:
-            # print('response contains {} rows'.format(result.rowcount))
-            marshalled = result_proxy_as_dict(result)
-            return marshalled
-        else:
-            return service_unavailable_message()
+        return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -79,12 +75,7 @@ def variant_distribution(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.variant_distribution(params[2], params[0], params[1], params[3])
-        if result is not None:
-            # print('response contains {} rows'.format(result.rowcount))
-            marshalled = result_proxy_as_dict(result)
-            return marshalled
-        else:
-            return service_unavailable_message()
+        return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -92,12 +83,7 @@ def most_common_variants(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.most_common_variants(params[0], params[1], params[6], params[5])
-        if result is not None:
-            # print('response contains {} rows'.format(result.rowcount))
-            marshalled = result_proxy_as_dict(result)
-            return marshalled
-        else:
-            return service_unavailable_message()
+        return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -105,12 +91,7 @@ def rarest_variants(body):
     def go():
         params = prepare_body_parameters(body)
         result = coordinator.rarest_variants(params[0], params[1], params[4], params[5])
-        if result is not None:
-            # print('response contains {} rows'.format(result.rowcount))
-            marshalled = result_proxy_as_dict(result)
-            return marshalled
-        else:
-            return service_unavailable_message()
+        return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -118,7 +99,7 @@ def values(attribute):
     def go():
         item = parse_name_to_vocabulary(attribute)
         if item is None:
-            return bad_request_message()
+            return f'Attribute {attribute} is not a valid parameter for this request', 400
         else:
             result = coordinator.values_of_attribute(item)
             return result if result is not None else service_unavailable_message()
@@ -142,11 +123,7 @@ def annotate(body):
         else:
             variant = parse_variant_from_dict(body)
             result = coordinator.annotate_variant(variant, with_annotations)
-        if result is not None:
-            marshalled = result_proxy_as_dict(result)
-            return marshalled
-        else:
-            return service_unavailable_message()
+        return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -154,13 +131,13 @@ def variants_in_region(body):
     def go():
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = coordinator.variants_in_region(interval)
+            result = coordinator.variants_in_genomic_interval(interval)
         else:
             gene_name = body.get(ReqParamKeys.GENE_NAME)
             gene_type = body.get(ReqParamKeys.GENE_TYPE)
             gene_id = body.get(ReqParamKeys.GENE_ID)
             result = coordinator.variants_in_gene(gene_name, gene_type, gene_id)
-        return result_proxy_as_dict(result) if result is not None else service_unavailable_message()
+        return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 
@@ -261,13 +238,6 @@ def parse_name_to_vocabulary(name: str):
 
 
 # ###########################       TRANSFORM OUTPUT
-def result_proxy_as_dict(result_proxy):
-    return {
-            'columns': result_proxy.keys(),
-            'rows': [row.values() for row in result_proxy.fetchall()]
-        }
-
-
 def print_output_table(output_dictionary):
     pretty_table = PrettyTable(output_dictionary['columns'])
     for row in output_dictionary['rows']:
@@ -299,10 +269,6 @@ def unhandled_exception(e):
 
 def service_unavailable_message():
     return '503: Service unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
-
-
-def bad_request_message():
-    return '400: Cannot answer to this request.', 400, {'x-error': 'Cannot answer to this request'}
 
 
 def bad_variant_parameters(msg: str):
