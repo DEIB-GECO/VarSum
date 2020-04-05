@@ -13,8 +13,7 @@ class AnnotInterface:
                  attrs: Optional[List[Vocabulary]]) -> FromClause:
         raise NotImplementedError('Any subclass of AnnotInterface must implement the abstract method "annotate"')
 
-    def find_gene_region(self, connection: Connection, gene_name: str, gene_type: Optional[str],
-                         gene_id: Optional[str], output_attrs: List[Vocabulary]) -> FromClause:
+    def find_gene_region(self, connection: Connection, gene: Gene, output_attrs: List[Vocabulary]) -> FromClause:
         raise NotImplementedError('Any subclass of AnnotInterface must implement the abstract method "find_gene_region"')
 
     @classmethod

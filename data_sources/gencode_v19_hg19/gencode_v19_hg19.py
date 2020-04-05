@@ -54,16 +54,15 @@ class GencodeV19HG19(AnnotInterface):
             utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: ANNOTATE REGION/VARIANT')
         return stmt
 
-    def find_gene_region(self, connection: Connection, gene_name: str, gene_type: Optional[str],
-                         gene_id: Optional[str], output_attrs: List[Vocabulary]):
+    def find_gene_region(self, connection: Connection, gene: Gene, output_attrs: List[Vocabulary]):
         self.connection = connection
         select_columns = [ann_table.c[self.col_map[att]].label(att.name) for att in output_attrs]
         stmt = select(select_columns)\
-            .where(ann_table.c.gene_name == gene_name)
-        if gene_type is not None:
-            stmt = stmt.where(ann_table.c.gene_type == gene_type)
-        if gene_id is not None:
-            stmt = stmt.where(ann_table.c.gene_id == gene_id)
+            .where(ann_table.c.gene_name == gene.name)
+        if gene.type_ is not None:
+            stmt = stmt.where(ann_table.c.gene_type == gene.type_)
+        if gene.id_ is not None:
+            stmt = stmt.where(ann_table.c.gene_id == gene.id_)
         if self.log_sql_statements:
             utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: FIND GENE')
         return stmt

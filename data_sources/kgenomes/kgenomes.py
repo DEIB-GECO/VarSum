@@ -39,7 +39,8 @@ class KGenomes(Source):
     avail_region_constraints = {
         Vocabulary.WITH_VARIANT,
         Vocabulary.WITH_VARIANT_SAME_C_COPY,
-        Vocabulary.WITH_VARIANT_DIFF_C_COPY
+        Vocabulary.WITH_VARIANT_DIFF_C_COPY,
+        Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL
     }
     region_col_map = {
         Vocabulary.CHROM: 'chrom',
@@ -457,6 +458,9 @@ class KGenomes(Source):
             if self.region_attrs.with_variants_diff_c_copy:
                 t = self.table_with_variants_on_diff_c_copies(select_columns)
                 to_combine_t.append(t)
+            if self.region_attrs.with_variants_in_reg:
+                t = self.view_of_variants_in_interval_or_type(select_columns)
+                to_combine_t.append(t)
             if len(to_combine_t) == 0:
                 self.my_region_t = None
             if len(to_combine_t) == 1:  # when only one filter kind
@@ -623,18 +627,12 @@ class KGenomes(Source):
     def view_of_variants_in_interval_or_type(self, select_columns: Optional[list]):
         if self.region_attrs.with_variants_in_reg is None and self.region_attrs.with_variants_of_type is None:
             raise ValueError('you called this method without giving any selection criteria')
-        columns = [genomes.c[c_name] for c_name in select_columns] if select_columns is not None else [
-            genomes]
+        columns = [genomes.c[c_name] for c_name in select_columns] if select_columns is not None else [genomes]
         stmt_as = select(columns)
         if self.region_attrs.with_variants_in_reg is not None:
-            chrom = self.region_attrs.with_variants_in_reg['chrom']
-            left_end = self.region_attrs.with_variants_in_reg['left']
-            right_end = self.region_attrs.with_variants_in_reg['right']
-            if chrom is None or left_end is None or right_end is None:
-                raise ValueError('the given genomic interval is not complete')
-            stmt_as = stmt_as.where((genomes.c.chrom == chrom) &
-                                    (genomes.c.start >= left_end) &
-                                    (genomes.c.start <= right_end))
+            stmt_as = stmt_as.where((genomes.c.chrom == self.region_attrs.with_variants_in_reg.chrom) &
+                                    (genomes.c.start >= self.region_attrs.with_variants_in_reg.start) &
+                                    (genomes.c.start <= self.region_attrs.with_variants_in_reg.stop))
         if self.region_attrs.with_variants_of_type is not None:
             stmt_as = stmt_as.where(genomes.c.mut_type.in_(self.region_attrs.with_variants_of_type))
         generated_view_name = utils.random_t_name_w_prefix('mut_of_type_interval')
@@ -644,6 +642,8 @@ class KGenomes(Source):
                             'VIEW OF REGIONS IN INTERVAL {} of types {}'.format(self.region_attrs.with_variants_in_reg,
                                                                                 self.region_attrs.with_variants_of_type))
         self.connection.execute(stmt)
+        return Table(generated_view_name, db_meta, autoload=True, autoload_with=self.connection,
+                     schema=default_schema_to_use_name)
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval, output_region_attrs: List[Vocabulary]) -> Selectable:
         select_columns = [genomes.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]

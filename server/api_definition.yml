@@ -511,6 +511,10 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/Variant'
+        in:
+          oneOf:
+            - $ref: '#/components/schemas/GenomicInterval'
+            - $ref: '#/components/schemas/Gene'
 
     DistributeBy:
       type: array

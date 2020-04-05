@@ -23,6 +23,7 @@ class ReqParamKeys:
     WITH_VARIANTS = 'with'
     WITH_VARS_ON_SAME_CHROM_COPY = 'on_same_chrom_copy'
     WITH_VARS_ON_DIFF_CHROM_COPY = 'on_diff_chrom_copy'
+    WITH_VARS_IN = 'in'
 
     OUTPUT = 'filter_output'
     OUT_MIN_FREQUENCY = 'min_frequency'
@@ -133,10 +134,8 @@ def variants_in_region(body):
             interval = parse_genomic_interval_from_dict(body)
             result = coordinator.variants_in_genomic_interval(interval)
         else:
-            gene_name = body.get(ReqParamKeys.GENE_NAME)
-            gene_type = body.get(ReqParamKeys.GENE_TYPE)
-            gene_id = body.get(ReqParamKeys.GENE_ID)
-            result = coordinator.variants_in_gene(gene_name, gene_type, gene_id)
+            gene = parse_gene_from_dict(body)
+            result = coordinator.variants_in_gene(gene)
         return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
@@ -160,9 +159,21 @@ def prepare_body_parameters(body):
 
     variants = body.get(ReqParamKeys.VARIANTS)
     if variants is not None:
+        if variants.get(ReqParamKeys.WITH_VARS_IN) is not None:
+            if variants[ReqParamKeys.WITH_VARS_IN].get(ReqParamKeys.STOP):
+                interval = parse_genomic_interval_from_dict(variants[ReqParamKeys.WITH_VARS_IN])
+                gene = None
+            else:
+                gene = parse_gene_from_dict(variants[ReqParamKeys.WITH_VARS_IN])
+                interval = None
+        else:
+            interval = None
+            gene = None
         variants = RegionAttrs(parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARIANTS)),
                                parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY)),
-                               parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY)))
+                               parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY)),
+                               interval,
+                               gene)
 
     by_attributes = None
     distribute_by = body.get(ReqParamKeys.BY_ATTRIBUTES)
@@ -217,6 +228,12 @@ def parse_genomic_interval_from_dict(region_dict: dict):
                            region_dict.get(ReqParamKeys.START),
                            region_dict.get(ReqParamKeys.STOP),
                            region_dict.get(ReqParamKeys.STRAND))
+
+
+def parse_gene_from_dict(gene_dict: dict):
+    return Gene(gene_dict.get(ReqParamKeys.GENE_NAME),
+                gene_dict.get(ReqParamKeys.GENE_TYPE),
+                gene_dict.get(ReqParamKeys.GENE_ID))
 
 
 def parse_name_to_vocabulary(name: str):

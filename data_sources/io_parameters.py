@@ -54,13 +54,27 @@ class GenomicIntervalUndefined(Exception):
     pass
 
 
+class Gene:
+    def __init__(self, name: str, type_: Optional[str] = None, id_: Optional[str] = None):
+        self.name = name
+        if type_:
+            self.type_ = type_
+        else:
+            self.type_ = None
+        if id_:
+            self.id_ = id_
+        else:
+            self.id_ = None
+
+
 class RegionAttrs:
 
     def __init__(self,
                  with_variants: Optional[list] = None,
                  with_variants_same_c_copy: Optional[list] = None,
                  with_variants_diff_c_copy: Optional[list] = None,
-                 something_else: Optional[list] = None
+                 with_variants_in_genomic_region: Optional[GenomicInterval] = None,
+                 with_variants_in_gene: Optional[Gene] = None
                  ):
         self.requires = set()
 
@@ -82,14 +96,17 @@ class RegionAttrs:
         else:
             self.with_variants_diff_c_copy = None
 
-        # TODO REMOVE
-        if something_else:
-            self.something_else = something_else
-            self.requires.add(Vocabulary.WITH_SOMETHING_ELSE)
+        if with_variants_in_genomic_region:
+            self.with_variants_in_reg = with_variants_in_genomic_region
+            self.requires.add(Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL)
         else:
-            self.something_else = None
+            self.with_variants_in_reg = None
 
-        self.with_variants_in_reg: Optional[dict] = None
+        if with_variants_in_gene:
+            self.with_variants_in_gene = with_variants_in_gene
+        else:
+            self.with_variants_in_gene = None
+
         self.with_variants_of_type: Optional[list] = None
 
 
@@ -172,7 +189,7 @@ class Vocabulary(Enum):
     WITH_VARIANT = 101
     WITH_VARIANT_SAME_C_COPY = 102
     WITH_VARIANT_DIFF_C_COPY = 103
-    WITH_SOMETHING_ELSE = 104   # TODO remove
+    WITH_VARIANT_IN_GENOMIC_INTERVAL = 104
     # TODO extend with region intervals and type
 
     # measures

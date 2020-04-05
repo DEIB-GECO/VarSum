@@ -24,6 +24,11 @@ LOG_SQL_STATEMENTS = True
 
 
 def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
+    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
+    if transformed_region_attrs[1] == 200:
+        region_attrs = transformed_region_attrs[0]
+    else:
+        return transformed_region_attrs
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -88,6 +93,11 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
 
 
 def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation):
+    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
+    if transformed_region_attrs[1] == 200:
+        region_attrs = transformed_region_attrs[0]
+    else:
+        return transformed_region_attrs
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -157,6 +167,11 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
 
 
 def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10):
+    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
+    if transformed_region_attrs[1] == 200:
+        region_attrs = transformed_region_attrs[0]
+    else:
+        return transformed_region_attrs
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
@@ -218,6 +233,11 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
 
 
 def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: Optional[float], limit_result: Optional[int] = 10):
+    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
+    if transformed_region_attrs[1] == 200:
+        region_attrs = transformed_region_attrs[0]
+    else:
+        return transformed_region_attrs
     if limit_result is None:
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
@@ -370,7 +390,7 @@ def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]):
         return result_proxy_as_dict(database.try_py_function(compute_result)), 200
 
 
-def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Optional[str]):
+def variants_in_gene(gene: Gene):
     select_from_sources = [
         Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
     ]
@@ -383,7 +403,7 @@ def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Opti
             obj: AnnotInterface = source()
 
             def var_in_gene(connection: Connection) -> FromClause:
-                return obj.find_gene_region(connection, gene_name, gene_type, ens_gene_id, select_from_sources)
+                return obj.find_gene_region(connection, gene, select_from_sources)
 
             return database.try_py_function(var_in_gene)
         return try_and_catch(do, None)
@@ -495,6 +515,61 @@ def get_region_of_variant(var: Mutation) -> Optional[list]:
         # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
         # they're equivalent
         return from_sources[0]
+
+
+def resolve_gene_name_into_interval(region_attr: RegionAttrs):
+    gene = region_attr.with_variants_in_gene
+    if gene is None:
+        return region_attr, 200
+    else:
+        select_from_sources = [
+            Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
+        ]
+        select_from_sources_as_set = set(select_from_sources)
+        eligible_sources = [_source for _source in _annotation_sources
+                            if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
+
+        def ask_to_source(source):
+            def do():
+                obj: AnnotInterface = source()
+
+                def var_in_gene(connection: Connection) -> FromClause:
+                    return obj.find_gene_region(connection, gene, select_from_sources)
+
+                return database.try_py_function(var_in_gene)
+            return try_and_catch(do, None)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
+            from_sources = executor.map(ask_to_source, eligible_sources)
+
+        # remove failures
+        from_sources = [result for result in from_sources if result is not None]
+        if len(from_sources) == 0:
+            logger.critical('Sources produced no data')
+            return 'Internal server error', 503
+        else:
+            merge_regions = \
+                select(['*']) \
+                .select_from(union(*from_sources).alias('all_annot_sources'))
+
+            def compute_region(connection):
+                if LOG_SQL_STATEMENTS:
+                    db_utils.show_stmt(connection, merge_regions, logger.debug, 'FIND GENE')
+                return connection.execute(merge_regions)
+            region_of_gene = database.try_py_function(compute_region)
+
+            result = result_proxy_as_dict(region_of_gene)
+            if len(result['rows']) > 1:
+                result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
+                return result, 300
+            elif len(result['rows']) == 0:
+                return 'No record in our database corresponds to the given gene parameters.', 404
+            else:
+                genomic_interval = result['rows'][0]
+                interval = GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None)
+                region_attr.with_variants_in_gene = None
+                region_attr.with_variants_in_reg = interval
+                return region_attr, 200
 
 
 def try_and_catch(fun, alternative_return_value, *args, **kwargs):
