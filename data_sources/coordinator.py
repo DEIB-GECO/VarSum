@@ -32,7 +32,7 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
         by_attributes_copy.append(Vocabulary.DONOR_ID)
     by_attributes_copy.sort(key=lambda x: x.name)
 
-    source_fatal_errors = dict()
+    notices = list()
 
     # collect results from individual sources
     def ask_to_source(source: Type[Source]):
@@ -96,7 +96,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
         by_attributes_copy.append(Vocabulary.DONOR_ID)
     by_attributes_copy.sort(key=lambda x: x.name)
 
-    source_fatal_errors = dict()
+    notices = list()
 
     # collect results from individual sources as DONOR_ID | OCCURRENCE | <by_attributes>
     def ask_to_source(source: Type[Source]):
@@ -161,7 +161,7 @@ def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, o
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
 
-    source_fatal_errors = dict()
+    notices = list()
 
     def ask_to_source(source: Type[Source]):
         def do():
@@ -222,7 +222,7 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
         limit_result = 10
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
 
-    source_fatal_errors = dict()
+    notices = list()
 
     def ask_to_source(source: Type[Source]):
         def do():
@@ -282,7 +282,7 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
 def values_of_attribute(attribute: Vocabulary) -> Optional[List]:
     eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
 
-    source_fatal_errors = dict()
+    notices = list()
 
     def ask_to_source(source):
         def do():
@@ -369,6 +369,94 @@ def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]) 
         return database.try_py_function(compute_result)
 
 
+def variants_in_gene(gene_name: str, gene_type: Optional[str], ens_gene_id: Optional[str]) -> Optional[ResultProxy]:
+    select_from_sources = [
+        Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
+    ]
+    select_from_sources_as_set = set(select_from_sources)
+    eligible_sources = [_source for _source in _annotation_sources
+                        if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
+
+    def ask_to_source(source):
+        def do():
+            obj: AnnotInterface = source()
+
+            def var_in_gene(connection: Connection) -> FromClause:
+                return obj.find_gene_region(connection, gene_name, gene_type, ens_gene_id, select_from_sources)
+
+            return database.try_py_function(var_in_gene)
+        return try_and_catch(do, None)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
+        from_sources = executor.map(ask_to_source, eligible_sources)
+
+    # remove failures
+    from_sources = [result for result in from_sources if result is not None]
+    if len(from_sources) == 0:
+        logger.critical('Sources produced no data')
+        return None
+    else:
+        merge_regions = \
+            select(['*']) \
+            .select_from(union(*from_sources).alias('all_annot_sources'))
+
+        def compute_region(connection):
+            if LOG_SQL_STATEMENTS:
+                db_utils.show_stmt(connection, merge_regions, logger.debug, 'FIND GENE')
+            return connection.execute(merge_regions)
+        region_of_gene_cursor = database.try_py_function(compute_region)
+
+        # db_utils.print_query_result(region_of_gene_cursor)
+        # return None
+        row_proxy = region_of_gene_cursor.fetchone()
+        if region_of_gene_cursor.fetchone() is not None:
+            region_of_gene_cursor.close()
+            raise ValueError('multiple regions match the entry gene data')
+        else:
+            first_row = row_proxy.values()
+            region_of_gene_cursor.close()
+            return variants_in_region(GenomicInterval(first_row[1], first_row[2], first_row[3], strand=None))
+
+
+def variants_in_region(interval: GenomicInterval) -> Optional[ResultProxy]:
+    eligible_sources = _sources
+    select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
+
+    def ask_to_source(source):
+        def do():
+            obj: Source = source()
+
+            def variant_in_region(connection: Connection):
+                return obj.variants_in_region(connection, interval, select_attrs)
+
+            return database.try_py_function(variant_in_region)
+        return try_and_catch(do, None)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
+        from_sources = executor.map(ask_to_source, eligible_sources)
+
+    # remove failures
+    from_sources = [result for result in from_sources if result is not None]
+    if len(from_sources) == 0:
+        logger.critical('Sources produced no data')
+        return None
+    else:
+        # no need for select distinct as the union does that already
+        stmt = \
+            select(['*']) \
+            .select_from(union(*from_sources).alias("all_sources")) \
+            .order_by(literal(2, types.Integer))
+
+        def compute_result(connection: Connection):
+            if LOG_SQL_STATEMENTS:
+                db_utils.show_stmt(connection, stmt, logger.debug, 'VARIANTS IN GENOMIC INTERVAL')
+            result = connection.execute(stmt)
+            return result
+
+        return database.try_py_function(compute_result)
+
+
+#   HELPER METHODS  #
 def get_chromosome_of_variant(variant):
     def get_chrom(connection):
         return KGenomes().get_chrom_of_variant(connection, variant)

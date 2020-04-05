@@ -645,6 +645,19 @@ class KGenomes(Source):
                                                                                 self.region_attrs.with_variants_of_type))
         self.connection.execute(stmt)
 
+    def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval, output_region_attrs: List[Vocabulary]) -> Selectable:
+        select_columns = [genomes.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]
+        stmt =\
+            select(select_columns).distinct() \
+            .where((genomes.c.start >= genomic_interval.start) &
+                   (genomes.c.start <= genomic_interval.stop) &
+                   (genomes.c.chrom == genomic_interval.chrom))
+        if self.log_sql_commands:
+            utils.show_stmt(connection, stmt, logger.debug, f'KGenomes: VARIANTS IN REGION '
+                                                            f'{genomic_interval.chrom}'
+                                                            f'-{genomic_interval.start}-{genomic_interval.stop}')
+        return stmt
+
     def take_regions_of_common_individuals(self, tables: list):
         """
         Generates a table containing all the mutations from all the origin tables but only for those individuals that

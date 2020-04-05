@@ -41,6 +41,10 @@ class ReqParamKeys:
     REF = 'ref'
     ALT = 'alt'
 
+    GENE_NAME = 'name'
+    GENE_TYPE = 'type'
+    GENE_ID = 'ensemble_id'
+
 
 connexion_app = connexion.App(__name__, specification_dir='./')  # internally it starts flask
 flask_app = connexion_app.app
@@ -143,6 +147,20 @@ def annotate(body):
             return marshalled
         else:
             return service_unavailable_message()
+    return try_and_catch(go)
+
+
+def variants_in_region(body):
+    def go():
+        if body.get(ReqParamKeys.STOP):
+            interval = parse_genomic_interval_from_dict(body)
+            result = coordinator.variants_in_region(interval)
+        else:
+            gene_name = body.get(ReqParamKeys.GENE_NAME)
+            gene_type = body.get(ReqParamKeys.GENE_TYPE)
+            gene_id = body.get(ReqParamKeys.GENE_ID)
+            result = coordinator.variants_in_gene(gene_name, gene_type, gene_id)
+        return result_proxy_as_dict(result) if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
 

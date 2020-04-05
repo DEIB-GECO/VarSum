@@ -1,7 +1,10 @@
 from data_sources.io_parameters import *
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import FromClause
-from typing import List
+from typing import List, Union
+
+
+
 
 
 class Source:
@@ -19,7 +22,7 @@ class Source:
     avail_region_constraints: set = set()
 
     def donors(self, connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs,
-               region_attrs: RegionAttrs) -> FromClause:
+               region_attrs: RegionAttrs) -> Union[FromClause, Notice]:
         """
         Requests a source to return the individuals having the characteristics in meta_attrs and region_attrs. For each
         return the attributes given in by_attributes (which always includes the donor identifier). Order is not important.
@@ -35,7 +38,7 @@ class Source:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "donors"')
 
     def variant_occurrence(self, connection: Connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs,
-                           region_attrs: RegionAttrs, variant: Mutation) -> FromClause:
+                           region_attrs: RegionAttrs, variant: Mutation) -> Union[FromClause, Notice]:
         """
         Requests a source to return the individuals having the characteristics in meta attrs and region attrs. For
         each of them specify
@@ -45,17 +48,23 @@ class Source:
         """
         raise NotImplementedError('Any subclass of Source must implement the abstract method "variant_occurrence".')
 
-    def most_common_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: float, limit_result: int):
+    def most_common_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
+                            out_max_freq: float, limit_result: int) -> Union[FromClause, Notice]:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "most_common_variant".')
 
-    def rarest_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: float, limit_result: int):
+    def rarest_variant(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
+                       out_min_freq: float, limit_result: int) -> Union[FromClause, Notice]:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "rarest_variant".')
 
-    def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
+    def values_of_attribute(self, connection, attribute: Vocabulary) -> Union[List, Notice]:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "values_of_attribute".')
 
-    def get_variant_details(self, connection, variant: Mutation, which_details: List[Vocabulary]) -> list:
+    def get_variant_details(self, connection, variant: Mutation, which_details: List[Vocabulary]) -> Union[List, Notice]:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "get_variant_details".')
+
+    def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
+                           output_region_attrs: List[Vocabulary]) -> FromClause:
+        raise NotImplementedError('Any subclass of Source must implement the abstract method "variants_in_region".')
 
     @classmethod
     def can_express_constraint(cls, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, method=None):

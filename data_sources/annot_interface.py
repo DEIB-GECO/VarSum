@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import FromClause
 from data_sources.io_parameters import *
@@ -11,7 +11,11 @@ class AnnotInterface:
 
     def annotate(self, connection: Connection, genomic_interval: GenomicInterval,
                  attrs: Optional[List[Vocabulary]]) -> FromClause:
-        raise NotImplementedError('ANy subclass of AnnotInterface must implement the abstract method "annotate"')
+        raise NotImplementedError('Any subclass of AnnotInterface must implement the abstract method "annotate"')
+
+    def find_gene_region(self, connection: Connection, gene_name: str, gene_type: Optional[str],
+                         gene_id: Optional[str], output_attrs: List[Vocabulary]) -> FromClause:
+        raise NotImplementedError('Any subclass of AnnotInterface must implement the abstract method "find_gene_region"')
 
     @classmethod
     def get_available_annotation_types(cls):

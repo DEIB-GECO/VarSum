@@ -198,6 +198,21 @@ class Vocabulary(Enum):
     # identifiers specific to genes
     GENE_NAME = 601
     GENE_TYPE = 602
+    GENE_ID = 603
 
     # special values
     unknown = 301
+
+
+class Notice:
+    """
+    Container for a message signaling a problem. The field msg is directed to the user and it's aimed at indicating why
+    a given source couldn't provide an answer. This object and subclasses are reserved for "normal" or expected
+    conditions which make the source not able to provide an answer. This do not replace Exceptions though! If
+    you encounter in a real error, then you should raise an Exception. An example use case for Notice is the
+    impossibility to return the answer due to privacy constraints.
+    """
+    msg: str = None
+
+    def __init__(self, msg_explaining_cause_of_error: str):
+        self.msg = msg_explaining_cause_of_error

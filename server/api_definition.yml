@@ -374,6 +374,58 @@ paths:
           description: Internal server error.
 
 
+  /variants_in_region:
+    post:
+      operationId: server.api.variants_in_region
+      summary: >-
+        Returns the list of variants falling in the area of interest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Gene'
+                - $ref: '#/components/schemas/GenomicInterval'
+            examples:
+              in_gene:
+                value:
+                  name: DDX11L1
+                  type: pseudogene
+              in_genomic_interval:
+                value:
+                  chrom: 1
+                  start: 29500
+                  stop: 50000
+
+      responses:
+        '200':
+          description: >-
+            A table represented as a JSON object. The item ("columns") is an array of the table column names: chromosome, start, stop, strand, gene name and gene type. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columns:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+              example:
+                columns: ['CHROM', 'START', 'STOP', 'STRAND', 'GENE_NAME', 'GENE_TYPE']
+                rows: [[1, 29553, 31109, 1, 'MIR1302-11', 'lincRNA'], [1, 34553, 46081, -1, 'FAM138A', 'lincRNA']]
+        '400':
+          description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '503':
+          description: Internal server error.
+
+
 components:
   schemas:
     VariantID:
@@ -482,3 +534,16 @@ components:
         - chrom
         - start
         - stop
+
+    Gene:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        ensemble_id:
+          type:
+            string
+      required:
+        - name

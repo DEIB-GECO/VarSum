@@ -2,7 +2,7 @@ from sqlalchemy import MetaData, Table, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import Selectable, func
 from typing import Optional, List
-from data_sources.io_parameters import Vocabulary, Mutation, GenomicInterval
+from data_sources.io_parameters import *
 from data_sources.annot_interface import AnnotInterface
 import database.database as database
 import database.db_utils as utils
@@ -26,7 +26,8 @@ class GencodeV19HG19(AnnotInterface):
         Vocabulary.STOP: 'stop',
         Vocabulary.STRAND: 'strand',
         Vocabulary.GENE_NAME: 'gene_name',
-        Vocabulary.GENE_TYPE: 'gene_type'
+        Vocabulary.GENE_TYPE: 'gene_type',
+        Vocabulary.GENE_ID: 'gene_id'
     }
 
     def __init__(self):
@@ -50,21 +51,21 @@ class GencodeV19HG19(AnnotInterface):
         if genomic_interval.strand is not None and genomic_interval.strand != 0:
             stmt = stmt.where(ann_table.c.strand == genomic_interval.strand)
         if self.log_sql_statements:
-            utils.show_stmt(connection, stmt, logger.debug, 'ANNOTATE REGION/VARIANT')
+            utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: ANNOTATE REGION/VARIANT')
         return stmt
 
-    def find_gene_region(self, connection: Connection, gene_name: str, gene_type: Optional[str]) -> Selectable:
+    def find_gene_region(self, connection: Connection, gene_name: str, gene_type: Optional[str],
+                         gene_id: Optional[str], output_attrs: List[Vocabulary]):
         self.connection = connection
-        stmt = select([ann_table.c.chrom.label(Vocabulary.CHROM.name),
-                       ann_table.c.start.label(Vocabulary.START.name),
-                       ann_table.c.stop.label(Vocabulary.STOP.name),
-                       ann_table.c.strand.label(Vocabulary.STRAND.name),
-                       ann_table.c.gene_type.label(Vocabulary.GENE_TYPE.name)])\
+        select_columns = [ann_table.c[self.col_map[att]].label(att.name) for att in output_attrs]
+        stmt = select(select_columns)\
             .where(ann_table.c.gene_name == gene_name)
         if gene_type is not None:
             stmt = stmt.where(ann_table.c.gene_type == gene_type)
+        if gene_id is not None:
+            stmt = stmt.where(ann_table.c.gene_id == gene_id)
         if self.log_sql_statements:
-            utils.show_stmt(connection, stmt, logger.debug, 'FIND GENE')
+            utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: FIND GENE')
         return stmt
 
     @staticmethod
