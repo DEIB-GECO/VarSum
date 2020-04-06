@@ -24,7 +24,7 @@ paths:
           style: simple
           schema:
             type: string
-            enum: [assembly, gender, population, super_population, dna_source, health_status]
+            enum: [assembly, gender, population, super_population, dna_source, health_status, gene_type]
       responses:
         '200':
           description: >-
@@ -71,15 +71,27 @@ paths:
                   $ref: '#/components/schemas/FilterMetadata'
                 having_variants:
                   $ref: '#/components/schemas/FilterVariants'
-            example:
-              distribute_by: [gender]
-              having_meta:
-                assembly: hg19
-                super_population: [EAS]
-                health_status: 'true'
-              having_variants:
-                with: [id: rs367896724]
-
+            examples:
+              East Asian with variant rs367896724 by gender:
+                value:
+                  distribute_by: [gender]
+                  having_meta:
+                    assembly: hg19
+                    super_population: [EAS]
+                    health_status: 'true'
+                  having_variants:
+                    with: [id: rs367896724]
+              Europeans with any variant in gene DDX11L1 by population:
+                value:
+                  distribute_by: [population]
+                  having_meta:
+                    assembly: hg19
+                    super_population: [EUR]
+                    health_status: 'true'
+                  having_variants:
+                    in:
+                      name: DDX11L1
+                      type: pseudogene
       responses:
         '200':
           description: >-
@@ -134,17 +146,34 @@ paths:
                   $ref: '#/components/schemas/FilterVariants'
                 target_variant:
                   $ref: '#/components/schemas/Variant'
-            example:
-              distribute_by: [population]
-              having_meta:
-                assembly: hg19
-                super_population: [EAS]
-                health_status: 'true'
-                gender: female
-              having_variants:
-                with: [{chrom: 1, start: 10351, ref: "", alt: "A"}]
-              target_variant:
-                id: rs367896724
+            examples:
+              Distribution by population of variant rs367896724 in East Asian females having variants in genomic interval:
+                value:
+                  distribute_by: [population]
+                  having_meta:
+                    assembly: hg19
+                    super_population: [EAS]
+                    health_status: 'true'
+                    gender: female
+                  having_variants:
+                    in:
+                      chrom: 1
+                      start: 29500
+                      stop: 30600
+                  target_variant:
+                    id: rs367896724
+              Distribution by population of variant rs367896724 in East Asian females having variant 1-10351--A:
+                value:
+                  distribute_by: [population]
+                  having_meta:
+                    assembly: hg19
+                    super_population: [EAS]
+                    health_status: 'true'
+                    gender: female
+                  having_variants:
+                    with: [{chrom: 1, start: 10351, ref: "", alt: "A"}]
+                  target_variant:
+                    id: rs367896724
       responses:
         '200':
           description: >-
@@ -205,17 +234,19 @@ paths:
                     limit:
                       type: integer
                       example: 10
-            example:
-              filter_output:
-                limit: 5
-                max_frequency: 0.998
-              having_meta:
-                assembly: hg19
-                population: [BEB]
-                health_status: 'true'
-                gender: female
-              having_variants:
-                with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
+            examples:
+              Most common variants below 99.8% in females from Bangladesh having variants 1-13271-G-C and rs367896724:
+                value:
+                  filter_output:
+                    limit: 5
+                    max_frequency: 0.998
+                  having_meta:
+                    assembly: hg19
+                    population: [BEB]
+                    health_status: 'true'
+                    gender: female
+                  having_variants:
+                    with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
 
       responses:
         '200':
@@ -277,17 +308,19 @@ paths:
                     limit:
                       type: integer
                       example: 10
-            example:
-              filter_output:
-                limit: 5
-                min_frequency: 0.0099
-              having_meta:
-                assembly: hg19
-                population: [BEB]
-                health_status: 'true'
-                gender: female
-              having_variants:
-                with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
+            examples:
+              Rarest variants above 0.99% in females from Bangladesh having variants 1-13271-G-C and rs367896724:
+                value:
+                  filter_output:
+                    limit: 5
+                    min_frequency: 0.0099
+                  having_meta:
+                    assembly: hg19
+                    population: [BEB]
+                    health_status: 'true'
+                    gender: female
+                  having_variants:
+                    with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
 
       responses:
         '200':
@@ -331,16 +364,16 @@ paths:
                 - $ref: '#/components/schemas/Variant'
                 - $ref: '#/components/schemas/GenomicInterval'
             examples:
-              variant_coordinates:
+              Annotate variant having coordinates:
                 value:
                   chrom: 1
                   start: 13271
                   ref: "G"
                   alt: "C"
-              variant_id:
+              Annotate variant having id:
                 value:
                   id: rs367896724
-              genomic_interval:
+              Annotate genomic interval:
                 value:
                   chrom: 1
                   start: 29500
@@ -388,11 +421,11 @@ paths:
                 - $ref: '#/components/schemas/Gene'
                 - $ref: '#/components/schemas/GenomicInterval'
             examples:
-              in_gene:
+              Variants overlapping with gene:
                 value:
                   name: DDX11L1
                   type: pseudogene
-              in_genomic_interval:
+              Variants located in genomic region:
                 value:
                   chrom: 1
                   start: 29500
