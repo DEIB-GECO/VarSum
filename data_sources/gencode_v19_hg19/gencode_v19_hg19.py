@@ -1,7 +1,7 @@
 from sqlalchemy import MetaData, Table, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import Selectable, func
-from typing import Optional, List
+from typing import Optional, List, Union
 from data_sources.io_parameters import *
 from data_sources.annot_interface import AnnotInterface
 import database.database as database
@@ -66,6 +66,42 @@ class GencodeV19HG19(AnnotInterface):
         if self.log_sql_statements:
             utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: FIND GENE')
         return stmt
+
+    def values_of_attribute(self, connection, attribute: Vocabulary) -> Union[List, Notice]:
+        distinct_values = {
+            self.col_map[Vocabulary.GENE_TYPE]: [
+                'sense_overlapping',
+                'Mt_tRNA',
+                'processed_transcript',
+                'TR_V_pseudogene',
+                'misc_RNA',
+                'snoRNA',
+                'protein_coding',
+                'TR_J_gene',
+                'IG_J_gene',
+                'rRNA',
+                'polymorphic_pseudogene',
+                'antisense',
+                'miRNA',
+                'IG_D_gene',
+                'snRNA',
+                'IG_V_gene',
+                'TR_J_pseudogene',
+                'Mt_rRNA',
+                '3prime_overlapping_ncrna',
+                'lincRNA',
+                'IG_J_pseudogene',
+                'TR_V_gene',
+                'sense_intronic',
+                'IG_C_pseudogene',
+                'IG_C_gene',
+                'TR_C_gene',
+                'pseudogene',
+                'IG_V_pseudogene',
+                'TR_D_gene'
+                ]
+        }
+        return distinct_values.get(self.col_map.get(attribute))
 
     @staticmethod
     def init_singleton_table():

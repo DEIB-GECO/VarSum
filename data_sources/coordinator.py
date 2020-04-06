@@ -301,6 +301,7 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
 
 def values_of_attribute(attribute: Vocabulary):
     eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
+    eligible_sources.extend([annot_source for annot_source in _annotation_sources if attribute in annot_source.get_available_annotation_types()])
 
     notices = list()
 
@@ -323,7 +324,8 @@ def values_of_attribute(attribute: Vocabulary):
         logger.critical('Sources produced no data')
         return 'Internal server error', 503
     else:
-        return list(itertools.chain.from_iterable(from_sources)), 200
+        # merge resulting lists and remove duplicates
+        return list(set(list(itertools.chain.from_iterable(from_sources)))), 200
 
 
 def annotate_variant(variant: Mutation, annot_types: List[Vocabulary]):

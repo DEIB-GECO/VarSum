@@ -44,6 +44,7 @@ class ReqParamKeys:
 
     GENE_NAME = 'name'
     GENE_TYPE = 'type'
+    GENE_TYPE_2 = 'gene_type'
     GENE_ID = 'ensemble_id'
 
 
@@ -179,6 +180,7 @@ def prepare_body_parameters(body):
     distribute_by = body.get(ReqParamKeys.BY_ATTRIBUTES)
     if distribute_by is not None:
         by_attributes = list()
+        # allow only the following parameter names into distribute_by
         for att in [ReqParamKeys.GENDER, ReqParamKeys.HEALTH_STATUS, ReqParamKeys.DNA_SOURCE,
                     ReqParamKeys.POPULATION_CODE, ReqParamKeys.SUPER_POPULATION_CODE]:  # TODO missing mut type
             if att in distribute_by:
@@ -249,6 +251,8 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.HEALTH_STATUS
     elif name == ReqParamKeys.ASSEMBLY:
         return Vocabulary.ASSEMBLY
+    elif name == ReqParamKeys.GENE_TYPE_2:
+        return Vocabulary.GENE_TYPE
     else:
         logger.info('name without a match in Vocabulary')
         return None
