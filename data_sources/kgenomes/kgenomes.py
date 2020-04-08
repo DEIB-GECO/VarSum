@@ -1,4 +1,3 @@
-from typing import List
 from ..source_interface import *
 from ..io_parameters import *
 from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types
@@ -58,7 +57,8 @@ class KGenomes(Source):
 
     log_sql_commands: bool = True
     
-    def __init__(self):
+    def __init__(self, logger_instance):
+        super().__init__(logger_instance)
         self.connection: Optional[Connection] = None
         self.init_singleton_tables()
         self.meta_attrs: Optional[MetadataAttrs] = None
@@ -88,9 +88,7 @@ class KGenomes(Source):
                 select([self.my_region_t.c.item_id]).distinct()
             ))
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, logger.debug, 'KGENOMES: STMT DONORS WITH REQUIRED ATTRIBUTES')
-
-        # utils.create_table_as(utils.random_t_name_w_prefix('d_distr'), stmt, default_schema_to_use_name, connection, False)
+            utils.show_stmt(self.connection, stmt, self.logger.debug, 'KGENOMES: STMT DONORS WITH REQUIRED ATTRIBUTES')
         return stmt
 
     def variant_occurrence(self, connection: Connection, by_attributes: list, meta_attrs: MetadataAttrs,
@@ -135,7 +133,7 @@ class KGenomes(Source):
                                                    stmt_sample_set.c.item_id == stmt_samples_w_var.c.item_id))
         # TODO test what happens if sample set is empty and it is anyway used in the left join statement
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, logger.debug, 'KGENOMES: STMT VARIANT OCCURRENCE')
+            utils.show_stmt(connection, stmt, self.logger.debug, 'KGENOMES: STMT VARIANT OCCURRENCE')
         return stmt
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
@@ -198,14 +196,14 @@ class KGenomes(Source):
                 stmt = stmt.having(func_frequency <= freq_threshold)
             stmt = stmt.order_by(desc(func_frequency), desc(func_occurrence)) \
                 .limit(limit_result)
-        logger.debug(f'KGenomes: request rank_variants_by_frequency/ for a population of {population_size} individuals')
+        self.logger.debug(f'KGenomes: request rank_variants_by_frequency/ for a population of {population_size} individuals')
         # create result table
         if population_size <= 333:  # 333 is the population size at which the execution time w index matches that w/o index
             connection.execute('SET SESSION enable_seqscan=false')  # this + LIMIT force use the index on genomes table up to 149 individuals
         if self.log_sql_commands:
-            logger.debug('KGenomes: RANKING VARIANTS IN SAMPLE SET')
+            self.logger.debug('KGenomes: RANKING VARIANTS IN SAMPLE SET')
         t_name = utils.random_t_name_w_prefix('ranked_variants')
-        utils.create_table_as(t_name, stmt, default_schema_to_use_name, connection, self.log_sql_commands, logger.debug)
+        utils.create_table_as(t_name, stmt, default_schema_to_use_name, connection, self.log_sql_commands, self.logger.debug)
         result = Table(t_name, db_meta, autoload=True, autoload_with=connection, schema=default_schema_to_use_name)
         connection.invalidate()  # do not recycle this connection (instead of setting seqscan=true)
         return result
@@ -215,8 +213,8 @@ class KGenomes(Source):
         # self.connection = connection
         # region_attributes = genomes.columns.keys()
         # meta_attributes = metadata.columns.keys()
-        # logger.debug('regions:', region_attributes)
-        # logger.debug('meta:', meta_attributes)
+        # self.logger.debug('regions:', region_attributes)
+        # self.logger.debug('meta:', meta_attributes)
         # if attribute in meta_attributes:
         #     stmt = select([metadata.c[attribute]]).distinct()
         # elif attribute in region_attributes:
@@ -385,7 +383,7 @@ class KGenomes(Source):
         elif self.meta_attrs.super_population:
             query = query.where(metadata.c.super_population.in_(self.meta_attrs.super_population))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
-        utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, logger.debug)
+        utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, self.logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)
         # if self.log_sql_commands:
         #     utils.show_stmt(t_stmt, 'TABLE OF SAMPLES HAVING META')
@@ -446,12 +444,12 @@ class KGenomes(Source):
             target_t_name = utils.random_t_name_w_prefix('with')
             stmt_create_table = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
             if self.log_sql_commands:
-                utils.show_stmt(self.connection, stmt_create_table, logger.debug,
+                utils.show_stmt(self.connection, stmt_create_table, self.logger.debug,
                                 'INDIVIDUALS HAVING "ALL" THE {} MUTATIONS (WITH DUPLICATE ITEM_ID)'.format(
                                     len(self.region_attrs.with_variants)))
             self.connection.execute(stmt_create_table)
             if self.log_sql_commands:
-                logger.debug('DROP TABLE ' + union_table.name)
+                self.logger.debug('DROP TABLE ' + union_table.name)
             union_table.drop(self.connection)
             return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection, schema=default_schema_to_use_name)
 
@@ -475,7 +473,7 @@ class KGenomes(Source):
                                                                   only_item_id_in_table=only_item_id_in_table)
         stmt_create_table = utils.stmt_create_table_as(t_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt_create_table, logger.debug,
+            utils.show_stmt(self.connection, stmt_create_table, self.logger.debug,
                             'CREATE TABLE HAVING ANY OF THE {} MUTATIONS'.format(len(mutations)))
         self.connection.execute(stmt_create_table)
         return Table(t_name, db_meta, autoload=True, autoload_with=self.connection,
@@ -518,11 +516,11 @@ class KGenomes(Source):
         target_t_name = utils.random_t_name_w_prefix('with_var_same_c_copy')
         stmt = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, logger.debug,
+            utils.show_stmt(self.connection, stmt, self.logger.debug,
                             'INDIVIDUALS (+ THE GIVEN MUTATIONS) HAVING ALL THE SPECIFIED MUTATIONS ON THE SAME CHROMOSOME COPY')
         self.connection.execute(stmt)
         if self.log_sql_commands:
-            logger.debug('DROP TABLE ' + intermediate_table.name)
+            self.logger.debug('DROP TABLE ' + intermediate_table.name)
         intermediate_table.drop(self.connection)
         return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,
                      schema=default_schema_to_use_name)
@@ -562,11 +560,11 @@ class KGenomes(Source):
         target_t_name = utils.random_t_name_w_prefix('with_var_diff_c_copies')
         stmt = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, logger.debug,
+            utils.show_stmt(self.connection, stmt, self.logger.debug,
                             'INDIVIDUALS (+ THE GIVEN MUTATIONS) HAVING BOTH MUTATIONS ON OPPOSITE CHROMOSOME COPIES')
         self.connection.execute(stmt)
         if self.log_sql_commands:
-            logger.debug('DROP TABLE ' + intermediate_table.name)
+            self.logger.debug('DROP TABLE ' + intermediate_table.name)
         intermediate_table.drop(self.connection)
         return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,
                      schema=default_schema_to_use_name)
@@ -585,7 +583,7 @@ class KGenomes(Source):
         generated_view_name = utils.random_t_name_w_prefix('mut_of_type_interval')
         stmt = utils.stmt_create_view_as(generated_view_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, logger.debug,
+            utils.show_stmt(self.connection, stmt, self.logger.debug,
                             'VIEW OF REGIONS IN INTERVAL {} of types {}'.format(self.region_attrs.with_variants_in_reg,
                                                                                 self.region_attrs.with_variants_of_type))
         self.connection.execute(stmt)
@@ -600,9 +598,9 @@ class KGenomes(Source):
                    (genomes.c.start <= genomic_interval.stop) &
                    (genomes.c.chrom == genomic_interval.chrom))
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, logger.debug, f'KGenomes: VARIANTS IN REGION '
-                                                            f'{genomic_interval.chrom}'
-                                                            f'-{genomic_interval.start}-{genomic_interval.stop}')
+            utils.show_stmt(connection, stmt, self.logger.debug, f'KGenomes: VARIANTS IN REGION '
+                                                                 f'{genomic_interval.chrom}'
+                                                                 f'-{genomic_interval.start}-{genomic_interval.stop}')
         return stmt
 
     def take_regions_of_common_individuals(self, tables: list):
@@ -636,7 +634,7 @@ class KGenomes(Source):
             target_t_name = utils.random_t_name_w_prefix('intersect')
             stmt_create_table = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
             if self.log_sql_commands:
-                utils.show_stmt(self.connection, stmt_create_table, logger.debug,
+                utils.show_stmt(self.connection, stmt_create_table, self.logger.debug,
                                 'SELECT ALL FROM SOURCE TABLES WHERE item_id IS IN ALL SOURCE TABLES')
             self.connection.execute(stmt_create_table)
             # TODO drop partial tables ?
@@ -671,15 +669,15 @@ class KGenomes(Source):
         else:
             stmt = stmt.where(genomes.c.id == variant.id)
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, logger.debug, 'GET VARIANT DETAILS')
+            utils.show_stmt(connection, stmt, self.logger.debug, 'GET VARIANT DETAILS')
         result = connection.execute(stmt)
         if result.rowcount == 0:
             return list()
         else:
             if result.rowcount > 1:
-                logger.error(f'user searched for variant: chrom {str(variant.chrom)}, start {str(variant)}, '
-                             f'ref {str(variant.ref)}, alt {str(variant.alt)}, id {str(variant.id)}'
-                             f'but two results were found')
+                self.logger.error(f'user searched for variant: chrom {str(variant.chrom)}, start {str(variant)}, '
+                                  f'ref {str(variant.ref)}, alt {str(variant.alt)}, id {str(variant.id)}'
+                                  f'but two results were found')
             final_result = result.fetchone().values()
             result.close()
             return final_result

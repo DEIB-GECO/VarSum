@@ -7,11 +7,33 @@ db_user = sys.argv[2]
 db_password = sys.argv[3]
 db_port = sys.argv[4]
 
-logger.add("./logs/log_{time}.log",
-           rotation='100 MB',
-           format='{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}',
+logger.remove()  # removes default logger to stderr with level DEBUG
+# log to stderr only messages with level INFO or above (exceptions are level ERROR, thus included)
+logger.add(sys.stderr,
+           level='INFO',
+           format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+                  "<blue>{extra[request_id]}</blue> | "
+                  "<level>{level: <8}</level> | "
+                  "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+           colorize=True,
            backtrace=True,
            diagnose=True)
+# log to file any message of any security level
+logger.add("./logs/log_{time}.log",
+           level='TRACE',
+           rotation='100 MB',
+           format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+                  "<blue>{extra[request_id]}</blue> | "
+                  "<level>{level: <8}</level> | "
+                  "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+           colorize=False,
+           backtrace=True,
+           diagnose=True)
+logger.configure(
+    extra={
+        'request_id': 'default'
+    }
+)
 
 if __name__ == '__main__':
     if run == 'server':
@@ -21,6 +43,8 @@ if __name__ == '__main__':
         api.run()
     elif run == 'tests':
         database.config_db_engine_for_tests(db_user, db_password, db_port)
+
+        # noinspection PyUnresolvedReferences
         import tests.tests                              # this runs anything is in the tests.py module
     else:
         logger.critical('The first program argument must be either "server" or "tests" followed by database username, password and port.')

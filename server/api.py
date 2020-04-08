@@ -1,8 +1,8 @@
 import connexion
 from data_sources.io_parameters import *
 from flask import redirect
-import data_sources.coordinator as coordinator
-from typing import Optional, List
+from data_sources.coordinator import Coordinator, AskUserIntervention, NoDataFromSources
+import sqlalchemy.exc
 from prettytable import PrettyTable
 from loguru import logger
 
@@ -52,6 +52,7 @@ connexion_app = connexion.App(__name__, specification_dir='./')  # internally it
 flask_app = connexion_app.app
 base_path = '/popstudy/'
 api_doc_relative_path = 'api/ui/'
+request_incremental_index = 0   # used to identify every new request
 
 
 def run():
@@ -67,45 +68,56 @@ def run():
 # ###########################       ENDPOINTS
 def donor_distribution(body):
     def go():
+        req_logger.info(f'new request to /donor_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = coordinator.donor_distribution(params[2], params[0], params[1])
-        return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+        result = Coordinator(req_logger).donor_distribution(params[2], params[0], params[1])
+        return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 def variant_distribution(body):
     def go():
+        req_logger.info(f'new request to /variant_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = coordinator.variant_distribution(params[2], params[0], params[1], params[3])
-        return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+        result = Coordinator(req_logger).variant_distribution(params[2], params[0], params[1], params[3])
+        return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 def most_common_variants(body):
     def go():
+        req_logger.info(f'new request to /most_common_variants with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = coordinator.rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
-        return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+        result = Coordinator(req_logger).rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
+        return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 def rarest_variants(body):
     def go():
+        req_logger.info(f'new request to /rarest_variants with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = coordinator.rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
-        return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+        result = Coordinator(req_logger).rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
+        return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 def values(attribute):
     def go():
+        req_logger.info(f'new request to /values with attribute {attribute}')
         item = parse_name_to_vocabulary(attribute)
         if item is None:
+            req_logger.info('response says the attribute is not valid')
             return f'Attribute {attribute} is not a valid parameter for this request', 400
         else:
-            result = coordinator.values_of_attribute(item)
-            return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+            result = Coordinator(req_logger).values_of_attribute(item)
+            return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 def annotate(body):
@@ -119,31 +131,36 @@ def annotate(body):
     ]
 
     def go():
+        req_logger.info(f'new request to /annotate with request_body: {body}')
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = coordinator.annotate_interval(interval, with_annotations)
+            result = Coordinator(req_logger).annotate_interval(interval, with_annotations)
         else:
             variant = parse_variant_from_dict(body)
-            result = coordinator.annotate_variant(variant, with_annotations)
-        return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+            result = Coordinator(req_logger).annotate_variant(variant, with_annotations)
+        return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 def variants_in_region(body):
     def go():
+        req_logger.info(f'new request to /variants_in_region with request_body: {body}')
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = coordinator.variants_in_genomic_interval(interval)
+            result = Coordinator(req_logger).variants_in_genomic_interval(interval)
         else:
             gene = parse_gene_from_dict(body)
-            result = coordinator.variants_in_gene(gene)
-        return result if result is not None else service_unavailable_message()
-    return try_and_catch(go)
+            result = Coordinator(req_logger).variants_in_gene(gene)
+        return result_if_not_none(result, req_logger)
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
 
 
 @connexion_app.route(base_path)
 def home():
     # redirect to base_path + api_doc_relative_path
+    unique_logger().info('new request to /home')
     return redirect(api_doc_relative_path)
 
 
@@ -267,45 +284,65 @@ def print_output_table(output_dictionary):
 
 
 # ###########################       ERROR HANDLING
-def try_and_catch(function, *args, **kwargs):
+def try_and_catch(function, request_logger, *args, **kwargs):
+    # noinspection PyBroadException
     try:
         return function(*args, **kwargs)
     except VariantUndefined as e:
-        logger.info(repr(e))
-        return bad_variant_parameters(repr(e))
+        return bad_variant_parameters(e.args[0], request_logger)
     except GenomicIntervalUndefined as e:
-        logger.info(repr(e))
-        return bad_genomic_interval_parameters(repr(e))
-    except coordinator.AskUserIntervention as e:
-        logger.debug(f'Asking for user intervention with response {e.proposed_status_code} {e.response_body}')
+        return bad_genomic_interval_parameters(e.args[0], request_logger)
+    except AskUserIntervention as e:
+        request_logger.info(f'Asking for user intervention with response {e.proposed_status_code}')
         return e.response_body, e.proposed_status_code
-    except coordinator.NoDataFromSources as e:
-        logger.critical('Sources produced no data')
-        return e.response_body, e.proposed_status_code if e.response_body is not None else service_unavailable_message()
-    except Exception as e:
-        logger.exception(e)
-        return service_unavailable_message()
+    except NoDataFromSources as e:
+        request_logger.critical(f'Sources produced no data. Potential notices: {e.response_body}')
+        return (e.response_body, e.proposed_status_code) if e.response_body is not None else service_unavailable_message(request_logger)
+    except sqlalchemy.exc.OperationalError:  # database connection not available / user canceled query
+        request_logger.exception('database connection not available / user canceled query')
+        return service_unavailable_message(request_logger)
+    except Exception:
+        request_logger.exception('unknown exception in module api')
+        return service_unavailable_message(request_logger)
 
 
 @flask_app.errorhandler(Exception)
 def unhandled_exception(e):
-    logger.error('! An uncaught exception reached the default exception handler !')
+    logger.error('! An uncaught exception reached the default exception handler in module api!')
     logger.exception(e)
-    return 'Internal server error', 500
+    return service_unavailable_message(logger)
 
 
-def service_unavailable_message():
+def service_unavailable_message(log_with):
+    log_with.error('responded with service_unavailable_message')
     return 'Service temporarily unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
 
 
-def bad_variant_parameters(msg: str):
+def bad_variant_parameters(msg: str, log_with):
+    log_with.info('responded with bad_variant_parameters')
     return 'One or more variants included in the request miss required attributes or contain misspells. ' \
            f'Detailed message: {msg}', 400, {'x-error': 'Cannot answer to this request'}
 
 
-def bad_genomic_interval_parameters(msg: str):
+def bad_genomic_interval_parameters(msg: str, log_with):
+    log_with.info('responded with bad_genomic_interval_parameters')
     return 'One or more genomic intervals included in the request miss required attributes or contain misspells. ' \
            f'Detailed message: {msg}', 400, {'x-error': 'Cannot answer to this request'}
+
+
+def unique_logger():
+    global request_incremental_index
+    request_incremental_index += 1
+    return logger.bind(request_id=request_incremental_index)
+
+
+def result_if_not_none(result, req_logger):
+    if result is not None:
+        req_logger.success('response ok')
+        return result
+    else:
+        req_logger.error('response says service_unavailable_message')
+        return service_unavailable_message(req_logger)
 
 
 if __name__ == '__main__':

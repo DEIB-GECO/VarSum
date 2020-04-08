@@ -1,5 +1,6 @@
 from data_sources.io_parameters import *
 import database.db_utils as db_utils
+from loguru import logger
 
 
 if __name__ == '__main__':
@@ -147,6 +148,7 @@ something_else = MetadataAttrs(something_else='bla')
 
 by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
 
+
 def test_disable_seqscan_and_connection_recycle():
     connection = database.check_and_get_connection()
     try:
@@ -177,26 +179,28 @@ def test_disable_seqscan_and_connection_recycle():
     connection.close()
     print(f'POOL STATUS {str(database.db_engine.pool.status())}')
 
+
 def kgenomes_most_common_var_without_coordinator():
     import data_sources.kgenomes.kgenomes as kgenomes
     import database.database as database
-    source = kgenomes.KGenomes()
+    source = kgenomes.KGenomes(logger)
 
     def do(connection):
-        stmt = source.most_common_variant(connection, hg19_healthy_female_BEB,
-                                          RegionAttrs([mut4_al1], None, [mut1, mut2_fingerprint]),
-                                          out_max_freq=None, limit_result=10)
+        stmt = source.rank_variants_by_frequency(connection, hg19_healthy_female_BEB,
+                                                 RegionAttrs([mut4_al1], None, [mut1, mut2_fingerprint]), False,
+                                                 freq_threshold=None, limit_result=10)
         result = connection.execute(stmt)
         db_utils.print_query_result(result)
     database.try_py_function(do)
 
+
 def gencode_annotate_region_without_coordinator():
     import data_sources.gencode_v19_hg19.gencode_v19_hg19 as gencode
     import database.database as database
-    source = gencode.GencodeV19HG19()
+    source = gencode.GencodeV19HG19(logger)
 
     def do(connection):
-        stmt = source.annotate(connection, 1, 55516870, 55516870, None, None)
+        stmt = source.annotate(connection, GenomicInterval(1, 55516870, 55516870, None), None)
         result = connection.execute(stmt)
         print(f'result contains {result.rowcount} records')
         db_utils.print_query_result(result)
@@ -206,7 +210,7 @@ def gencode_annotate_region_without_coordinator():
 def variant_details_without_coordinator():
     import data_sources.kgenomes.kgenomes as kgenomes
     import database.database as database
-    source = kgenomes.KGenomes()
+    source = kgenomes.KGenomes(logger)
     ask_for = [
         Vocabulary.CHROM,
         Vocabulary.START,
@@ -230,10 +234,10 @@ def variant_details_without_coordinator():
 def gencode_find_gene_without_coordinator():
     import data_sources.gencode_v19_hg19.gencode_v19_hg19 as gencode
     import database.database as database
-    source = gencode.GencodeV19HG19()
+    source = gencode.GencodeV19HG19(logger)
 
     def do(connection):
-        stmt = source.find_gene_region(connection, 'OR4F5', None)
+        stmt = source.find_gene_region(connection, Gene('OR4F5'), [Vocabulary.CHROM])
         result = connection.execute(stmt)
         print(f'result contains {result.rowcount} records')
         db_utils.print_query_result(result)

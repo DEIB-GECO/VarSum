@@ -1,4 +1,4 @@
-from typing import Optional, List, Union
+from typing import List
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import FromClause
 from data_sources.io_parameters import *
@@ -8,6 +8,9 @@ class AnnotInterface:
 
     # MAP ATTRIBUTE NAMES TO TABLE COLUMN NAMES
     col_map: dict = {}
+
+    def __init__(self, logger_instance):
+        self.logger = logger_instance
 
     def annotate(self, connection: Connection, genomic_interval: GenomicInterval,
                  attrs: Optional[List[Vocabulary]]) -> FromClause:

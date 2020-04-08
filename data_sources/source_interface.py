@@ -1,7 +1,7 @@
 from data_sources.io_parameters import *
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import FromClause
-from typing import List, Union
+from typing import List
 
 
 class Source:
@@ -17,6 +17,9 @@ class Source:
 
     meta_col_map: dict = {}
     avail_region_constraints: set = set()
+
+    def __init__(self, logger_instance):
+        self.logger = logger_instance
 
     def donors(self, connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs,
                region_attrs: RegionAttrs) -> FromClause:

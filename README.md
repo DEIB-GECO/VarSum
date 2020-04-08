@@ -1,12 +1,12 @@
 # data_summarization_1KGP
 This tool is an example of application of the genomic data repository maintained by Politecnico di Milano - http://www.bioinformatics.deib.polimi.it/geco/ - and it is specifically aimed at describing the data source 1000 Genomes Project. This source contains +88 millions mutations from ⁓2.5 thousands individauls, who were self-declared healthy and sampled from 26 populations worldwide, including the continents America, Europe, East Asia, South Asia and Africa.
 
-The researcher who is interested in identifying a suitable control population for an experiment, can obtain throught this tool some summary statistics describing a set of individuals, including:
-- Numerosity of individuals
-- Numerosity of mutations
+The researcher who is interested in identifying a suitable control population for an experiment, can obtain through this tool some summary statistics describing a set of individuals, including:
+- Number of individuals
+- Number of mutations
 - Most frequent mutations
 - Most rare mutations
-- Avergae mutation frequency
+- Average mutation frequency
 These measures are described as distributions over the attributes of the individuals composing the population under study, i.e.:
 - Continent of provenance
 - Country of provenance

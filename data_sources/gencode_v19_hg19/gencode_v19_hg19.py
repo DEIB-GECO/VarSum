@@ -1,7 +1,7 @@
 from sqlalchemy import MetaData, Table, select
 from sqlalchemy.engine import Connection
-from sqlalchemy.sql.expression import Selectable, func
-from typing import Optional, List, Union
+from sqlalchemy.sql.expression import Selectable
+from typing import List
 from data_sources.io_parameters import *
 from data_sources.annot_interface import AnnotInterface
 import database.database as database
@@ -30,7 +30,8 @@ class GencodeV19HG19(AnnotInterface):
         Vocabulary.GENE_ID: 'gene_id'
     }
 
-    def __init__(self):
+    def __init__(self, logger_instance):
+        super().__init__(logger_instance)
         self.connection: Optional[Connection] = None
         self.init_singleton_table()
 
@@ -51,7 +52,7 @@ class GencodeV19HG19(AnnotInterface):
         if genomic_interval.strand is not None and genomic_interval.strand != 0:
             stmt = stmt.where(ann_table.c.strand == genomic_interval.strand)
         if self.log_sql_statements:
-            utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: ANNOTATE REGION/VARIANT')
+            utils.show_stmt(connection, stmt, self.logger.debug, 'GENCODE_V19_HG19: ANNOTATE REGION/VARIANT')
         return stmt
 
     def find_gene_region(self, connection: Connection, gene: Gene, output_attrs: List[Vocabulary]):
@@ -64,9 +65,10 @@ class GencodeV19HG19(AnnotInterface):
         if gene.id_ is not None:
             stmt = stmt.where(ann_table.c.gene_id == gene.id_)
         if self.log_sql_statements:
-            utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: FIND GENE')
+            utils.show_stmt(connection, stmt, self.logger.debug, 'GENCODE_V19_HG19: FIND GENE')
         return stmt
 
+    # noinspection SpellCheckingInspection
     def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
         distinct_values = {
             self.col_map[Vocabulary.GENE_TYPE]: [
@@ -129,5 +131,3 @@ class GencodeV19HG19(AnnotInterface):
                         connection.close()
             else:
                 initializing_lock.release()
-
-
