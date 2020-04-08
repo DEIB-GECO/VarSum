@@ -9,7 +9,7 @@ from loguru import logger
 
 class ReqParamKeys:
     """
-    This class contains the macro categories of the
+    This class maps the attribute names used in the api_definition.yml to constants used in this module only.
     """
     META = 'having_meta'
     GENDER = 'gender'
@@ -43,8 +43,8 @@ class ReqParamKeys:
     ALT = 'alt'
 
     GENE_NAME = 'name'
-    GENE_TYPE = 'type'
-    GENE_TYPE_2 = 'gene_type'
+    GENE_TYPE_IN_GENE_OBJECT = 'type'
+    GENE_TYPE_IN_VALUES_ENDPOINT = 'gene_type'
     GENE_ID = 'ensemble_id'
 
 
@@ -84,7 +84,7 @@ def variant_distribution(body):
 def most_common_variants(body):
     def go():
         params = prepare_body_parameters(body)
-        result = coordinator.most_common_variants(params[0], params[1], params[6], params[5])
+        result = coordinator.rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
         return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
@@ -92,7 +92,7 @@ def most_common_variants(body):
 def rarest_variants(body):
     def go():
         params = prepare_body_parameters(body)
-        result = coordinator.rarest_variants(params[0], params[1], params[4], params[5])
+        result = coordinator.rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
         return result if result is not None else service_unavailable_message()
     return try_and_catch(go)
 
@@ -234,7 +234,7 @@ def parse_genomic_interval_from_dict(region_dict: dict):
 
 def parse_gene_from_dict(gene_dict: dict):
     return Gene(gene_dict.get(ReqParamKeys.GENE_NAME),
-                gene_dict.get(ReqParamKeys.GENE_TYPE),
+                gene_dict.get(ReqParamKeys.GENE_TYPE_IN_GENE_OBJECT),
                 gene_dict.get(ReqParamKeys.GENE_ID))
 
 
@@ -251,7 +251,7 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.HEALTH_STATUS
     elif name == ReqParamKeys.ASSEMBLY:
         return Vocabulary.ASSEMBLY
-    elif name == ReqParamKeys.GENE_TYPE_2:
+    elif name == ReqParamKeys.GENE_TYPE_IN_VALUES_ENDPOINT:
         return Vocabulary.GENE_TYPE
     else:
         logger.info('name without a match in Vocabulary')
@@ -276,6 +276,12 @@ def try_and_catch(function, *args, **kwargs):
     except GenomicIntervalUndefined as e:
         logger.info(repr(e))
         return bad_genomic_interval_parameters(repr(e))
+    except coordinator.AskUserIntervention as e:
+        logger.debug(f'Asking for user intervention with response {e.proposed_status_code} {e.response_body}')
+        return e.response_body, e.proposed_status_code
+    except coordinator.NoDataFromSources as e:
+        logger.critical('Sources produced no data')
+        return e.response_body, e.proposed_status_code if e.response_body is not None else service_unavailable_message()
     except Exception as e:
         logger.exception(e)
         return service_unavailable_message()
@@ -289,7 +295,7 @@ def unhandled_exception(e):
 
 
 def service_unavailable_message():
-    return '503: Service unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
+    return 'Service temporarily unavailable. Retry later.', 503, {'x-error': 'service unavailable'}
 
 
 def bad_variant_parameters(msg: str):

@@ -67,7 +67,7 @@ class GencodeV19HG19(AnnotInterface):
             utils.show_stmt(connection, stmt, logger.debug, 'GENCODE_V19_HG19: FIND GENE')
         return stmt
 
-    def values_of_attribute(self, connection, attribute: Vocabulary) -> Union[List, Notice]:
+    def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
         distinct_values = {
             self.col_map[Vocabulary.GENE_TYPE]: [
                 'sense_overlapping',

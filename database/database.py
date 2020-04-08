@@ -2,6 +2,8 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.engine import Engine, Connection, ResultProxy
 from sqlalchemy import exc as sqlalchemy_exceptions
 from sqlalchemy import select
+from typing import Callable, Optional
+from database import db_utils
 from loguru import logger
 
 db_engine: Engine
@@ -44,11 +46,13 @@ def check_and_get_connection(num_attempts: int = 2) -> Connection:
             raise e
 
 
-def try_stmt(what, num_attempts: int = 2) -> ResultProxy:
+def try_stmt(what, log_function: Optional[Callable], log_title: Optional[str], num_attempts: int = 2) -> ResultProxy:
     # following instruction can raise OperationalError if the database is not reachable/not connected but it's caught elsewhere
     connection = db_engine.connect().execution_options(autocommit=True)
     try:
         num_attempts -= 1
+        if log_function is not None:
+            db_utils.show_stmt(connection, what, log_function, log_title)
         result = connection.execute(what)
         return result
     except sqlalchemy_exceptions.DatabaseError as e:  # pooled database connection has been invalidated/restarted
@@ -57,7 +61,7 @@ def try_stmt(what, num_attempts: int = 2) -> ResultProxy:
         logger.debug(f'POOL STATUS {str(db_engine.pool.status())}')
         if num_attempts > 0:
             logger.debug('Attempt {} more time(s)'.format(num_attempts))
-            return try_stmt(what, num_attempts)
+            return try_stmt(what, log_function, log_title, num_attempts)
         else:
             raise e
     finally:

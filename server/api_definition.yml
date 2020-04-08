@@ -32,16 +32,21 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                type: object
+                properties:
+                  values:
+                    type: array
+                    items:
+                      type: string
               examples:
                 gender:
                   value:
-                    ['male', 'female']
+                    values:
+                      ['male', 'female']
                 dna_source:
                   value:
-                    ['lcl', 'blood']
+                    values:
+                      ['lcl', 'blood']
         '400':
           description: The parameter does not exists.
         '503':
@@ -114,8 +119,12 @@ paths:
               example:
                 columns: ['gender', 'population', 'donors']
                 rows: [['male', 'JPT', 2], ['female', 'ITU', 4]]
+        '300':
+          description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The given gene is not present in our database.
         '503':
           description: Internal server error.
 
@@ -196,8 +205,12 @@ paths:
               example:
                 columns: ['gender', 'donors', 'occurrence', 'frequency']
                 rows: [['male', 9, 12, 0.666], ['female', 2, 4, 1.0]]
+        '300':
+          description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The given gene is not present in our database.
         '503':
           description: Internal server error.
 
@@ -270,8 +283,12 @@ paths:
               example:
                 columns: ['chrom', 'start', 'ref', 'alt', 'donors', 'occurrence', 'frequency']
                 rows: [['1', '10768', 'G', 'T', 8, 16, 1.0], ['1', '102889', '', 'GT', 7, 13, 0,8125]]
+        '300':
+          description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The given gene is not present in our database.
         '503':
           description: Internal server error.
 
@@ -344,8 +361,12 @@ paths:
               example:
                 columns: ['chrom', 'start', 'ref', 'alt', 'donors', 'occurrence', 'frequency']
                 rows: [['1', '10768', 'G', 'T',  2, 3, 0.075‬], ['1', '102889', '', 'GT', 1, 2, 0.05]]
+        '300':
+          description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The given gene is not present in our database.
         '503':
           description: Internal server error.
 
@@ -378,7 +399,6 @@ paths:
                   chrom: 1
                   start: 29500
                   stop: 50000
-
       responses:
         '200':
           description: >-
@@ -403,6 +423,8 @@ paths:
                 rows: [[1, 29553, 31109, 1, 'MIR1302-11', 'lincRNA'], [1, 34553, 46081, -1, 'FAM138A', 'lincRNA']]
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The variant specified is not present in our database.
         '503':
           description: Internal server error.
 
@@ -430,7 +452,6 @@ paths:
                   chrom: 1
                   start: 29500
                   stop: 50000
-
       responses:
         '200':
           description: >-
@@ -453,8 +474,12 @@ paths:
               example:
                 columns: ['CHROM', 'START', 'STOP', 'STRAND', 'GENE_NAME', 'GENE_TYPE']
                 rows: [[1, 29553, 31109, 1, 'MIR1302-11', 'lincRNA'], [1, 34553, 46081, -1, 'FAM138A', 'lincRNA']]
+        '300':
+          description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
           description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The given gene is not present in our database.
         '503':
           description: Internal server error.
 

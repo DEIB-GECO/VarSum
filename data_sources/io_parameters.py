@@ -223,15 +223,15 @@ class Vocabulary(Enum):
     unknown = 301
 
 
-class Notice:
+class Notice(Exception):
     """
-    Container for a message signaling a problem. The field msg is directed to the user and it's aimed at indicating why
-    a given source couldn't provide an answer. This object and subclasses are reserved for "normal" or expected
-    conditions which make the source not able to provide an answer. This do not replace Exceptions though! If
-    you encounter in a real error, then you should raise an Exception. An example use case for Notice is the
-    impossibility to return the answer due to privacy constraints.
+    Container for a message signaling a problem. The field msg is directed to the user and it's shown to to him as a
+    notice indicating why a given source couldn't provide an answer. This object and subclasses are reserved for
+    "normal" or expected conditions which make the source not able to provide an answer. This do not replace
+    other Exceptions though! If you encounter in a real error, then you should raise an Exception.
+    Notice is the only expected way for a source to communicate to the coordinator providing anything that isn't the
+    answer.
+    An example use case for Notice is the impossibility to return the answer due to privacy constraints.
     """
-    msg: str = None
-
     def __init__(self, msg_explaining_cause_of_error: str):
         self.msg = msg_explaining_cause_of_error

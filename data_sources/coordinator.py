@@ -4,9 +4,8 @@ from data_sources.kgenomes.kgenomes import KGenomes
 from data_sources.gencode_v19_hg19.gencode_v19_hg19 import GencodeV19HG19
 from typing import List, Type
 from sqlalchemy.engine import ResultProxy
-from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc, literal_column, text
+from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc
 import sqlalchemy.exc
-import database.db_utils as db_utils
 import database.database as database
 import concurrent.futures
 from loguru import logger
@@ -23,12 +22,8 @@ _annotation_sources: List[Type[AnnotInterface]] = [
 LOG_SQL_STATEMENTS = True
 
 
-def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs):
-    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
-    if transformed_region_attrs[1] == 200:
-        region_attrs = transformed_region_attrs[0]
-    else:
-        return transformed_region_attrs
+def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> dict:
+    region_attrs = resolve_gene_into_interval(region_attrs)
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -62,7 +57,7 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
                     .select_from(source_stmt)
 
             return database.try_py_function(donors)
-        return try_and_catch(do, None)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -70,8 +65,7 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
     # remove failures
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
         # aggregate the results of all the queries
         by_attributes_as_columns = [column(att.name) for att in by_attributes]
@@ -83,21 +77,11 @@ def donor_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttr
             .select_from(union(*from_sources).alias("all_sources"))\
             .group_by(func.cube(*by_attributes_as_columns))
 
-        def compute_result(connection: Connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, logger.debug, 'DONOR DISTRIBUTION')
-            result = connection.execute(stmt)
-            return result
-
-        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
+        return get_as_dictionary(stmt, 'DONOR DISTRIBUTION', notices)
 
 
-def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation):
-    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
-    if transformed_region_attrs[1] == 200:
-        region_attrs = transformed_region_attrs[0]
-    else:
-        return transformed_region_attrs
+def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
+    region_attrs = resolve_gene_into_interval(region_attrs)
     eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
 
     # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -132,7 +116,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
                     .select_from(source_stmt)
 
             return database.try_py_function(variant_occurrence)
-        return try_and_catch(do, None)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources) + 1) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -141,8 +125,7 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
     # remove failures
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
         by_attributes_as_columns = [column(att.name) for att in by_attributes]
 
@@ -157,99 +140,24 @@ def variant_distribution(by_attributes: List[Vocabulary], meta_attrs: MetadataAt
             .select_from(union(*from_sources).alias('all_sources')) \
             .group_by(func.cube(*by_attributes_as_columns))
 
-        def compute_result(connection: Connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, logger.debug, 'VARIANT DISTRIBUTION')
-            result = connection.execute(stmt)
-            return result
-
-        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
+        return get_as_dictionary(stmt, 'VARIANT DISTRIBUTION', notices)
 
 
-def most_common_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_max_freq: Optional[float], limit_result: Optional[int] = 10):
-    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
-    if transformed_region_attrs[1] == 200:
-        region_attrs = transformed_region_attrs[0]
-    else:
-        return transformed_region_attrs
-    if limit_result is None:
-        limit_result = 10
-    eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.most_common_variant)]
-
+def rank_variants_by_freq(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
+                          out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> dict:
+    region_attrs = resolve_gene_into_interval(region_attrs)
+    limit_result = limit_result or 10
+    eligible_sources = [source for source in _sources if
+                        source.can_express_constraint(meta_attrs, region_attrs, source.rank_variants_by_frequency)]
     notices = list()
 
     def ask_to_source(source: Type[Source]):
         def do():
             obj = source()
 
-            def most_common_var_from_source(connection: Connection):
-                source_stmt = obj.most_common_variant(connection, meta_attrs, region_attrs, out_max_freq, limit_result)\
-                    .alias(source.__name__)
-                return \
-                    select([
-                        column(Vocabulary.CHROM.name),
-                        column(Vocabulary.START.name),
-                        column(Vocabulary.REF.name),
-                        column(Vocabulary.ALT.name),
-                        column(Vocabulary.POPULATION_SIZE.name),
-                        column(Vocabulary.POSITIVE_DONORS.name),
-                        column(Vocabulary.OCCURRENCE.name),
-                        column(Vocabulary.FREQUENCY.name)
-                    ]) \
-                    .select_from(source_stmt)
-            return database.try_py_function(most_common_var_from_source)
-        return try_and_catch(do, None)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
-        from_sources = executor.map(ask_to_source, eligible_sources)
-
-    # remove failures
-    from_sources = [result for result in from_sources if result is not None]
-    if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
-    else:
-        stmt = \
-            select([
-                column(Vocabulary.CHROM.name),
-                column(Vocabulary.START.name),
-                column(Vocabulary.REF.name),
-                column(Vocabulary.ALT.name),
-                column(Vocabulary.POPULATION_SIZE.name),
-                column(Vocabulary.POSITIVE_DONORS.name),
-                column(Vocabulary.OCCURRENCE.name).label('OCCURRENCE_OF_VARIANT'),
-                column(Vocabulary.FREQUENCY.name).label('FREQUENCY_OF_VARIANT')
-            ]) \
-            .select_from(union(*from_sources).alias('all_sources')) \
-            .order_by(desc(column(Vocabulary.FREQUENCY.name)), desc(column(Vocabulary.OCCURRENCE.name)))
-
-        def compute_result(connection: Connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, logger.debug, 'MOST COMMON VARIANTS')
-            result = connection.execute(stmt)
-            return result
-
-        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
-
-
-def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_min_freq: Optional[float], limit_result: Optional[int] = 10):
-    transformed_region_attrs = resolve_gene_name_into_interval(region_attrs)
-    if transformed_region_attrs[1] == 200:
-        region_attrs = transformed_region_attrs[0]
-    else:
-        return transformed_region_attrs
-    if limit_result is None:
-        limit_result = 10
-    eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.rarest_variant)]
-
-    notices = list()
-
-    def ask_to_source(source: Type[Source]):
-        def do():
-            obj = source()
-
-            def rarest_var_from_source(connection: Connection):
-                source_stmt = obj.rarest_variant(connection, meta_attrs, region_attrs, out_min_freq, limit_result)\
+            def rank_var(connection: Connection):
+                source_stmt = obj.rank_variants_by_frequency(connection, meta_attrs, region_attrs, ascending,
+                                                             out_min_freq, limit_result)\
                     .alias(source.__name__)
                 return \
                     select([
@@ -264,8 +172,8 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
                     ]) \
                     .select_from(source_stmt)
 
-            return database.try_py_function(rarest_var_from_source)
-        return try_and_catch(do, None)
+            return database.try_py_function(rank_var)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -273,8 +181,7 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
     # remove failures
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
         stmt = \
             select([
@@ -287,19 +194,15 @@ def rarest_variants(meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, out_mi
                 column(Vocabulary.OCCURRENCE.name).label('OCCURRENCE_OF_VARIANT'),
                 column(Vocabulary.FREQUENCY.name).label('FREQUENCY_OF_VARIANT')
             ]) \
-            .select_from(union(*from_sources).alias('all_sources')) \
-            .order_by(asc(column(Vocabulary.FREQUENCY.name)), asc(column(Vocabulary.OCCURRENCE.name)))
-
-        def compute_result(connection: Connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, logger.debug, 'RAREST VARIANT')
-            result = connection.execute(stmt)
-            return result
-
-        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
+            .select_from(union(*from_sources).alias('all_sources'))
+        if ascending:
+            stmt = stmt.order_by(asc(column(Vocabulary.FREQUENCY.name)), asc(column(Vocabulary.OCCURRENCE.name)))
+        else:
+            stmt = stmt.order_by(desc(column(Vocabulary.FREQUENCY.name)), desc(column(Vocabulary.OCCURRENCE.name)))
+        return get_as_dictionary(stmt, 'RANKED VARIANTS {}'.format('ASC' if ascending else 'DESC'), notices)
 
 
-def values_of_attribute(attribute: Vocabulary):
+def values_of_attribute(attribute: Vocabulary) -> dict:
     eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
     eligible_sources.extend([annot_source for annot_source in _annotation_sources if attribute in annot_source.get_available_annotation_types()])
 
@@ -307,13 +210,13 @@ def values_of_attribute(attribute: Vocabulary):
 
     def ask_to_source(source):
         def do():
-            obj: Source = source()
+            obj = source()
 
             def values_from_source(connection: Connection):
                 return obj.values_of_attribute(connection, attribute)
 
             return database.try_py_function(values_from_source)
-        return try_and_catch(do, None)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -321,27 +224,60 @@ def values_of_attribute(attribute: Vocabulary):
     # remove failures
     from_sources = [result for result in from_sources if result]    # removes Nones and empty lists
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
-        # merge resulting lists and remove duplicates
-        return list(set(list(itertools.chain.from_iterable(from_sources)))), 200
+        result = {
+            # merge resulting lists and remove duplicates
+            'values': list(set(list(itertools.chain.from_iterable(from_sources))))
+        }
+        if notices:
+            result['notice'] = [notice.args for notice in notices]
+        return result
 
 
-def annotate_variant(variant: Mutation, annot_types: List[Vocabulary]):
-    region_of_variant = get_region_of_variant(variant)
-    if region_of_variant is None:
-        error_msg = f'The variant {str(variant)} is not present in our genomic variant sources.'
-        logger.debug(error_msg)
-        return error_msg, 404
+def annotate_variant(variant: Mutation, annot_types: List[Vocabulary]) -> dict:
+    # first find the genomic region corresponding to this variant (chrom, start, stop)
+    notices = list()
+
+    def ask_to_source(source):
+        def do():
+            obj: Source = source()
+
+            def get_region(connection):
+                return obj.get_variant_details(connection, variant,
+                                               [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP])
+
+            return database.try_py_function(get_region)
+
+        return try_catch_source_errors(do, None, notices)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
+        from_sources = executor.map(ask_to_source, _sources)
+
+    # remove failures
+    from_sources = [result for result in from_sources if result is not None and len(result) > 0]
+    if len(from_sources) == 0:
+        logger.debug(f'It\'s unclear if sources are not available or variant {variant} cannot be located. '
+                     f'AskUserIntervention with 404 raised anyway.')
+        body = {
+            'error': f'The variant {variant} is not present in our genomic variant sources.'
+        }
+        if notices:
+            body['notice'] = notices
+        raise AskUserIntervention(body, 404)
     else:
+        # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
+        # they're equivalent
+        region_of_variant = from_sources[0]
         return annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types)
 
 
-def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]):
+def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]) -> dict:
     which_annotations = set(annot_types)
     eligible_sources = [_source for _source in _annotation_sources
                         if not which_annotations.isdisjoint(_source.get_available_annotation_types())]
+
+    notices = list()
 
     def ask_to_source(source):
         def do():
@@ -365,7 +301,7 @@ def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]):
                     .select_from(source_stmt)
 
             return database.try_py_function(annotate_region)
-        return try_and_catch(do, None)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -373,32 +309,26 @@ def annotate_interval(interval: GenomicInterval, annot_types: List[Vocabulary]):
     # remove failures
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
         # aggregate the results of all the queries
-        annot_types_as_columns = [column(annot.name) for annot in annot_types]
         stmt = \
             select(['*']) \
             .select_from(union(*from_sources).alias("all_sources")) \
             .order_by(literal(1, types.Integer))
 
-        def compute_result(connection: Connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, logger.debug, 'ANNOTATE GENOMIC INTERVAL')
-            result = connection.execute(stmt)
-            return result
-
-        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
+        return get_as_dictionary(stmt, 'ANNOTATE GENOMIC INTERVAL', notices)
 
 
-def variants_in_gene(gene: Gene):
+def variants_in_gene(gene: Gene) -> dict:
     select_from_sources = [
         Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
     ]
     select_from_sources_as_set = set(select_from_sources)
     eligible_sources = [_source for _source in _annotation_sources
                         if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
+
+    notices = list()
 
     def ask_to_source(source):
         def do():
@@ -408,7 +338,7 @@ def variants_in_gene(gene: Gene):
                 return obj.find_gene_region(connection, gene, select_from_sources)
 
             return database.try_py_function(var_in_gene)
-        return try_and_catch(do, None)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -416,33 +346,28 @@ def variants_in_gene(gene: Gene):
     # remove failures
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
         merge_regions = \
             select(['*']) \
             .select_from(union(*from_sources).alias('all_annot_sources'))
 
-        def compute_region(connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, merge_regions, logger.debug, 'FIND GENE')
-            return connection.execute(merge_regions)
-        region_of_gene = database.try_py_function(compute_region)
-
-        result = result_proxy_as_dict(region_of_gene)
+        result = get_as_dictionary(merge_regions, 'FIND GENE', notices)
         if len(result['rows']) > 1:
             result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
-            return result, 300
+            raise AskUserIntervention(result, 300)
         elif len(result['rows']) == 0:
-            return 'No record in our database corresponds to the given gene parameters.', 404
+            raise AskUserIntervention('No record in our database corresponds to the given gene parameters.', 404)
         else:
             genomic_interval = result['rows'][0]
             return variants_in_genomic_interval(GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None))
 
 
-def variants_in_genomic_interval(interval: GenomicInterval):
+def variants_in_genomic_interval(interval: GenomicInterval) -> dict:
     eligible_sources = _sources
     select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
+
+    notices = list()
 
     def ask_to_source(source):
         def do():
@@ -452,7 +377,7 @@ def variants_in_genomic_interval(interval: GenomicInterval):
                 return obj.variants_in_region(connection, interval, select_attrs)
 
             return database.try_py_function(variant_in_region)
-        return try_and_catch(do, None)
+        return try_catch_source_errors(do, None, notices)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
         from_sources = executor.map(ask_to_source, eligible_sources)
@@ -460,8 +385,7 @@ def variants_in_genomic_interval(interval: GenomicInterval):
     # remove failures
     from_sources = [result for result in from_sources if result is not None]
     if len(from_sources) == 0:
-        logger.critical('Sources produced no data')
-        return 'Internal server error', 503
+        raise NoDataFromSources(notices)
     else:
         # no need for select distinct as the union does that already
         stmt = \
@@ -469,61 +393,18 @@ def variants_in_genomic_interval(interval: GenomicInterval):
             .select_from(union(*from_sources).alias("all_sources")) \
             .order_by(literal(2, types.Integer))
 
-        def compute_result(connection: Connection):
-            if LOG_SQL_STATEMENTS:
-                db_utils.show_stmt(connection, stmt, logger.debug, 'VARIANTS IN GENOMIC INTERVAL')
-            result = connection.execute(stmt)
-            return result
-
-        return result_proxy_as_dict(database.try_py_function(compute_result)), 200
+        return get_as_dictionary(stmt, 'VARIANTS IN GENOMIC INTERVAL', notices)
 
 
 #   HELPER METHODS  #
-def result_proxy_as_dict(result_proxy):
-    return {
-            'columns': result_proxy.keys(),
-            'rows': [row.values() for row in result_proxy.fetchall()]
-        }
-    
-
 def get_chromosome_of_variant(variant):
     def get_chrom(connection):
         return KGenomes().get_chrom_of_variant(connection, variant)
     return database.try_py_function(get_chrom)
 
 
-def get_region_of_variant(var: Mutation) -> Optional[list]:
-    # to the me of the future: I suggest you to not generalize this method. If you want to generalize it, then you must
-    # take care of merging the results coming from multiple sources. Here instead that problem is avoided because
-    # it returns only values that are assumed to be equal in all sources.
-    def ask_to_source(source):
-        def do():
-            obj: Source = source()
-
-            def get_region(connection):
-                return obj.get_variant_details(connection, var, [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP])
-            return database.try_py_function(get_region)
-        return try_and_catch(do, None)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
-        from_sources = executor.map(ask_to_source, _sources)
-
-    # remove failures
-    from_sources = [result for result in from_sources if result is not None and len(result) > 0]
-    if len(from_sources) == 0:
-        logger.debug('Sources produced no data')
-        return None
-    else:
-        # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
-        # they're equivalent
-        return from_sources[0]
-
-
-def resolve_gene_name_into_interval(region_attr: RegionAttrs):
-    gene = region_attr.with_variants_in_gene
-    if gene is None:
-        return region_attr, 200
-    else:
+def resolve_gene_into_interval(region_attr: Optional[RegionAttrs]) -> RegionAttrs:
+    if region_attr is not None and region_attr.with_variants_in_gene is not None:
         select_from_sources = [
             Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
         ]
@@ -531,15 +412,17 @@ def resolve_gene_name_into_interval(region_attr: RegionAttrs):
         eligible_sources = [_source for _source in _annotation_sources
                             if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
 
+        notices = list()
+
         def ask_to_source(source):
             def do():
                 obj: AnnotInterface = source()
 
                 def var_in_gene(connection: Connection) -> FromClause:
-                    return obj.find_gene_region(connection, gene, select_from_sources)
+                    return obj.find_gene_region(connection, region_attr.with_variants_in_gene, select_from_sources)
 
                 return database.try_py_function(var_in_gene)
-            return try_and_catch(do, None)
+            return try_catch_source_errors(do, None, notices)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -547,36 +430,29 @@ def resolve_gene_name_into_interval(region_attr: RegionAttrs):
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            logger.critical('Sources produced no data')
-            return 'Internal server error', 503
+            raise NoDataFromSources(notices)
         else:
             merge_regions = \
                 select(['*']) \
                 .select_from(union(*from_sources).alias('all_annot_sources'))
 
-            def compute_region(connection):
-                if LOG_SQL_STATEMENTS:
-                    db_utils.show_stmt(connection, merge_regions, logger.debug, 'FIND GENE')
-                return connection.execute(merge_regions)
-            region_of_gene = database.try_py_function(compute_region)
-
-            result = result_proxy_as_dict(region_of_gene)
+            result = get_as_dictionary(merge_regions, 'FIND GENE', notices)
             if len(result['rows']) > 1:
                 result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
-                return result, 300
+                raise AskUserIntervention(result, 300)
             elif len(result['rows']) == 0:
-                return 'No record in our database corresponds to the given gene parameters.', 404
+                raise AskUserIntervention('No record in our database corresponds to the given gene parameters.', 404)
             else:
                 genomic_interval = result['rows'][0]
                 interval = GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None)
                 region_attr.with_variants_in_gene = None
                 region_attr.with_variants_in_reg = interval
-                return region_attr, 200
+    return region_attr
 
 
-def try_and_catch(fun, alternative_return_value, *args, **kwargs):
+def try_catch_source_errors(fun, alternative_return_value, container_of_notices: List[Notice]):
     try:
-        return fun(*args, **kwargs)
+        return fun()
     except sqlalchemy.exc.OperationalError as e:  # database connection not available / user canceled query
         logger.exception('database connection not available / user canceled query', e)
         return alternative_return_value
@@ -589,6 +465,41 @@ def try_and_catch(fun, alternative_return_value, *args, **kwargs):
     except sqlalchemy.exc.DBAPIError as e:
         logger.exception('Exception from the underlying database', e)
         return alternative_return_value
+    except Notice as notice:
+        container_of_notices.append(notice)
+        return alternative_return_value
     except Exception as e:
         logger.exception(e)
         return alternative_return_value
+
+
+def get_as_dictionary(stmt_to_execute, log_with_intro: Optional[str], add_notices: List[Notice]):
+    log_fun = logger.debug if LOG_SQL_STATEMENTS else None
+    result_proxy: ResultProxy = database.try_stmt(stmt_to_execute, log_fun, log_with_intro)
+    result = {
+        'columns': result_proxy.keys(),
+        'rows': [row.values() for row in result_proxy.fetchall()]
+    }
+    if add_notices:
+        result['notice'] = [notice.args[0] for notice in add_notices]
+    return result
+
+
+class AskUserIntervention(Exception):
+    def __init__(self, response_body, proposed_status_code):
+        super().__init__(response_body, proposed_status_code)
+        self.response_body = response_body
+        self.proposed_status_code = proposed_status_code
+
+
+class NoDataFromSources(Exception):
+
+    response_body = None
+    proposed_status_code = 400
+
+    def __init__(self, notices: Optional[list] = None):
+        super().__init__(notices)
+        if notices:
+            self.response_body = {
+                'notice': [notice.args[0] for notice in notices]
+            }
