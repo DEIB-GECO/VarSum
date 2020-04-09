@@ -6,12 +6,14 @@ The researcher who is interested in identifying a suitable control population fo
 - Number of mutations
 - Most frequent mutations
 - Most rare mutations
-- Average mutation frequency
+- Average mutation frequency.
+
 These measures are described as distributions over the attributes of the individuals composing the population under study, i.e.:
 - Continent of provenance
 - Country of provenance
 - Gender 
-- Source of the DNA sample
+- Source of the DNA sample.
+
 Where each of the above characteristics can be fixed in order to restrict the set of individuals of interest to the ones having certain characteristics. 
 
 The user can also impose further constraints on the population, like the presence of some specific mutations and their location (same or different chromosome copy), the presence of mutations in a precise genomic area, and the inclusion of only some mutation kinds.
