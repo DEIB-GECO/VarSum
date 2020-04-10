@@ -1,8 +1,0 @@
-donor_distribution_part_1.iypnb https://colab.research.google.com/drive/1ddrAfUx3l50kTi_57aZWCUzRB-QCxnOS
-
-donor_distribution_part_2.iypnb https://colab.research.google.com/drive/1OSSG0ImTgbvotiXA58RLTwJz_Q0AI_pL
-
-variant_distribution.iypnb https://colab.research.google.com/drive/1LzhDqPh7JZPCxIgU2llQHtV_ZIo3LtHl
-
-rarest_variants.iypnb https://colab.research.google.com/drive/10unIqpmOuXMpawxOHoGHG8EEkkBdW_QP
-

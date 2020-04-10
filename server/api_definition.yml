@@ -4,8 +4,16 @@ info:
   description: >-
     This API returns summary statistics on user-defined populations and their
     variants, as the ones identified during the 1000 Genomes Project. For more
-    information visit the repository tomalf2/data_summarization_1KGP on GitHub
-  version: 0.1.0
+    information visit the repository 
+    [tomalf2/data_summarization_1KGP on GitHub](https://github.com/tomalf2/data_summarization_1KGP#data_summarization_1kgp).
+
+      ## Additional Resources
+      - [List of abbreviations commonly used in 1000 Genomes Project.](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
+      - [Python Notebooks demo](https://github.com/tomalf2/data_summarization_1KGP/tree/master/demo)
+      ## How to
+      - [(video) Exploring the documentation ](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ESEAJhaYj-FHh3AfcVYkp0wBDcI7djdLQm_twsIdjSpdTw?e=qMKfkY)
+      - [(video) Try the API by yourself](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ETN9_W7Z9xtMpg4l0UwfzTwBcDKvFkJ1eUKxGOcEvQGzIw?e=R9YFnZ)
+  version: 0.2.1
 servers:
   - url: /popstudy/api/
 paths:
@@ -59,7 +67,7 @@ paths:
       summary: >
         Returns the distribution of the individuals inside a population having the requested characteristics.
       description: >
-        Given a set of characteristics (parameters "having_meta" and "having_variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "by_attributes".
+        Given a set of characteristics (parameters "having_meta" and "having_variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "distribute_by".
       requestBody:
         required: true
         content:
@@ -101,6 +109,8 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
             application/json:
               schema:
@@ -117,8 +127,8 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['gender', 'population', 'donors']
-                rows: [['male', 'JPT', 2], ['female', 'ITU', 4]]
+                columns: ['GENDER', 'DONORS']
+                rows: [['female', 164], ['male', 139]]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
@@ -167,8 +177,8 @@ paths:
                   having_variants:
                     in:
                       chrom: 1
-                      start: 29500
-                      stop: 30600
+                      start: 29000
+                      stop: 34000
                   target_variant:
                     id: rs367896724
               Distribution by population of variant rs367896724 in East Asian females having variant 1-10351--A:
@@ -186,7 +196,9 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented in a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
+            A table represented as a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
             application/json:
               schema:
@@ -203,8 +215,8 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['gender', 'donors', 'occurrence', 'frequency']
-                rows: [['male', 9, 12, 0.666], ['female', 2, 4, 1.0]]
+                columns: ['POPULATION', 'POPULATION_SIZE', 'POSITIVE_DONORS', 'OCCURRENCE_OF_TARGET_VARIANT', 'FREQUENCY']
+                rows: [['KHV', 53, 32, 34, 0.32075471698113206], ['CHB', 57, 42, 43, 0.37719298245614036]]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
@@ -221,9 +233,9 @@ paths:
       summary: >-
         Returns a list of the most common variants inside the selected population.
       description: >-
-        The given parameters "having_meta" and "having_variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
+        The parameters "having_meta" and "having_variants" contribute to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to limit the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
 
-        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.
+          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
       requestBody:
         required: true
         content:
@@ -264,7 +276,9 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The first item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the size of the population considered, the number of individuals owning the variant, the occurrence and the frequency. The second item ("rows") is an array where each element is itself an array representing the values making a row of the table.
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
             application/json:
               schema:
@@ -281,8 +295,9 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['chrom', 'start', 'ref', 'alt', 'donors', 'occurrence', 'frequency']
-                rows: [['1', '10768', 'G', 'T', 8, 16, 1.0], ['1', '102889', '', 'GT', 7, 13, 0,8125]]
+
+                columns: ['CHROM', 'START', 'REF', 'ALT', 'POPULATION_SIZE', 'POSITIVE_DONORS', 'OCCURRENCE_OF_VARIANT', 'FREQUENCY_OF_VARIANT']
+                rows: [['1', '10768', 'G', 'T', 11, 8, 16, 0.727272], ['1', '102889', '', 'GT', 11, 8, 13, 0.590909]]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
@@ -299,9 +314,9 @@ paths:
       summary: >-
         Returns a list of the rarest variants inside the selected population.
       description: >-
-        The given parameters "having_meta" and "having_variants" contributes to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to customize the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
+        The parameters "having_meta" and "having_variants" contribute to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to limit the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
 
-        WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size obtained with the help of the "variant" request body parameter. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.
+          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
       requestBody:
         required: true
         content:
@@ -342,7 +357,9 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the number of individuals owning the variant, the occurrence and the frequency. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The first item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the size of the population considered, the number of individuals owning the variant, the occurrence and the frequency. The second item ("rows") is an array where each element is itself an array representing the values making a row of the table.
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
             application/json:
               schema:
@@ -359,8 +376,8 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['chrom', 'start', 'ref', 'alt', 'donors', 'occurrence', 'frequency']
-                rows: [['1', '10768', 'G', 'T',  2, 3, 0.075‬], ['1', '102889', '', 'GT', 1, 2, 0.05]]
+                columns: ['CHROM', 'START', 'REF', 'ALT', 'POPULATION_SIZE', 'POSITIVE_DONORS', 'OCCURRENCE_OF_VARIANT', 'FREQUENCY_OF_VARIANT']
+                rows: [[1,  76836,  'T',  'G',  22,  1,  1,  0.022727], [1,  77872,  'G',  'A',  22,  1,  1,  0.0.05987]]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
@@ -393,7 +410,7 @@ paths:
                   alt: "C"
               Annotate variant having id:
                 value:
-                  id: rs367896724
+                  id: rs568927205
               Annotate genomic interval:
                 value:
                   chrom: 1
@@ -402,7 +419,9 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names: chromosome, start, stop, strand, gene name and gene type. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The first item ("columns") is an array of the table column names: chromosome, start, stop, strand, gene name and gene type. The second is "rows", an array where each item is itself an array representing the values making a row of the table.
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
             application/json:
               schema:
@@ -455,7 +474,9 @@ paths:
       responses:
         '200':
           description: >-
-            A table represented as a JSON object. The item ("columns") is an array of the table column names: chromosome, start, stop, strand, gene name and gene type. The second is "rows", an array where each item is itself an array representing the values of a single row of the table.
+            A table represented as a JSON object. The first item ("columns") is an array of the table column names: chromosome, start, reference and alternative alleles. The second is "rows", an array where each item is itself an array representing a variant according to the properties in "columns".
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
             application/json:
               schema:
@@ -472,8 +493,8 @@ paths:
                       items:
                         type: string
               example:
-                columns: ['CHROM', 'START', 'STOP', 'STRAND', 'GENE_NAME', 'GENE_TYPE']
-                rows: [[1, 29553, 31109, 1, 'MIR1302-11', 'lincRNA'], [1, 34553, 46081, -1, 'FAM138A', 'lincRNA']]
+                columns: ['CHROM', 'START', 'REF', 'ALT']
+                rows: [[17, 61554458, 'G', 'T'], [17, 61554492, '', 'GCTGCC']]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
