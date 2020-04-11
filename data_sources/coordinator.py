@@ -87,9 +87,9 @@ class Coordinator:
         eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
-        by_attributes_copy = by_attributes.copy()
-        if Vocabulary.DONOR_ID not in by_attributes_copy:
-            by_attributes_copy.append(Vocabulary.DONOR_ID)
+        by_attributes_copy = set(by_attributes)
+        by_attributes_copy.update([Vocabulary.DONOR_ID, Vocabulary.GENDER])
+        by_attributes_copy = list(by_attributes_copy)
         by_attributes_copy.sort(key=lambda x: x.name)
     
         notices = list()
@@ -122,24 +122,39 @@ class Coordinator:
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources) + 1) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
-            chromosome = executor.submit(self.get_chromosome_of_variant, variant).result()
+            if variant.chrom is None:
+                region_of_variant = executor.submit(self.get_region_of_variant, variant).result()
+            else:
+                region_of_variant = [variant.chrom, variant.start, variant.start+1]  # stop is fake but I don't need it anyway
     
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
             raise NoDataFromSources(notices)
         else:
-            by_attributes_as_columns = [column(att.name) for att in by_attributes]
-    
+            all_sources = union(*from_sources).alias('all_sources')
+
+            # functions
             func_count_donors = func.count(column(Vocabulary.DONOR_ID.name)).label('POPULATION_SIZE')
             func_count_positive_donors = func.count(1).filter(column(Vocabulary.OCCURRENCE.name) > 0).label('POSITIVE_DONORS')
+            func_count_males = cast(func.count(1).filter(column(Vocabulary.GENDER.name) == 'male'), types.Integer).label('MALES')
+            func_count_females = cast(func.count(1).filter(column(Vocabulary.GENDER.name) == 'female'), types.Integer).label('FEMALES')
             func_count_occurrence = func.sum(column(Vocabulary.OCCURRENCE.name)).label('OCCURRENCE_OF_TARGET_VARIANT')
-            func_frequency = func.rr.mut_frequency(func_count_occurrence, func_count_donors, chromosome).label(Vocabulary.FREQUENCY.name)
+            if meta_attrs.assembly == 'hg19':
+                func_frequency_new = func.rr.mut_frequency_new_hg19(func_count_occurrence, func_count_males, func_count_females,
+                                                                    region_of_variant[0],
+                                                                    region_of_variant[1])
+            else:
+                func_frequency_new = func.rr.mut_frequency_new_grch38(func_count_occurrence, func_count_males, func_count_females,
+                                                                      region_of_variant[0],
+                                                                      region_of_variant[1])
+            func_frequency_new = func_frequency_new.label(Vocabulary.FREQUENCY.name)
     
             # merge results by union (which removes duplicates) and count
+            by_attributes_as_columns = [column(att.name) for att in by_attributes]
             stmt = \
-                select(by_attributes_as_columns + [func_count_donors, func_count_positive_donors, func_count_occurrence, func_frequency]) \
-                .select_from(union(*from_sources).alias('all_sources')) \
+                select(by_attributes_as_columns + [func_count_donors, func_count_positive_donors, func_count_occurrence, func_frequency_new]) \
+                .select_from(all_sources) \
                 .group_by(func.cube(*by_attributes_as_columns))
     
             return self.get_as_dictionary(stmt, 'VARIANT DISTRIBUTION', notices)
@@ -235,40 +250,8 @@ class Coordinator:
             return result
 
     def annotate_variant(self, variant: Mutation, annot_types: List[Vocabulary]) -> dict:
-        # first find the genomic region corresponding to this variant (chrom, start, stop)
-        notices = list()
-    
-        def ask_to_source(source):
-            def do():
-                obj: Source = source(self.logger)
-    
-                def get_region(connection):
-                    return obj.get_variant_details(connection, variant,
-                                                   [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP])
-    
-                return database.try_py_function(get_region)
-    
-            return self.try_catch_source_errors(do, None, notices)
-    
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
-            from_sources = executor.map(ask_to_source, _sources)
-    
-        # remove failures
-        from_sources = [result for result in from_sources if result is not None and len(result) > 0]
-        if len(from_sources) == 0:
-            self.logger.debug(f'It\'s unclear if sources are not available or variant {variant} cannot be located. '
-                              f'AskUserIntervention with 404 raised anyway.')
-            body = {
-                'error': f'The variant {variant} is not present in our genomic variant sources.'
-            }
-            if notices:
-                body['notice'] = notices
-            raise AskUserIntervention(body, 404)
-        else:
-            # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
-            # they're equivalent
-            region_of_variant = from_sources[0]
-            return self.annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types)
+        region_of_variant = self.get_region_of_variant(variant)
+        return self.annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types)
 
     def annotate_interval(self, interval: GenomicInterval, annot_types: List[Vocabulary]) -> dict:
         which_annotations = set(annot_types)
@@ -392,11 +375,40 @@ class Coordinator:
             return self.get_as_dictionary(stmt, 'VARIANTS IN GENOMIC INTERVAL', notices)
 
     #   HELPER METHODS  #
-    def get_chromosome_of_variant(self, variant):
-        def get_chrom(connection):
-            return KGenomes(self.logger).get_chrom_of_variant(connection, variant)
-        self.logger.warning('this function works with 1000 Genomes data but is not complete! Remember to finish it')
-        return database.try_py_function(get_chrom)
+    def get_region_of_variant(self, variant):
+        """Returns an array of values corresponding to CHROM, START, STOP of this variant. """
+        notices = list()
+
+        def ask_to_source(source):
+            def do():
+                obj: Source = source(self.logger)
+
+                def get_region(connection):
+                    return obj.get_variant_details(connection, variant,
+                                                   [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP])
+
+                return database.try_py_function(get_region)
+
+            return self.try_catch_source_errors(do, None, notices)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
+            from_sources = executor.map(ask_to_source, _sources)
+
+        # remove failures
+        from_sources = [result for result in from_sources if result is not None and len(result) > 0]
+        if len(from_sources) == 0:
+            self.logger.debug(f'It\'s unclear if sources are not available or variant {variant} cannot be located. '
+                              f'AskUserIntervention with 404 raised anyway.')
+            body = {
+                'error': f'The variant {variant} is not present in our genomic variant sources.'
+            }
+            if notices:
+                body['notice'] = notices
+            raise AskUserIntervention(body, 404)
+        else:
+            # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
+            # they're equivalent
+            return from_sources[0]
 
     def resolve_gene_into_interval(self, region_attr: Optional[RegionAttrs]) -> RegionAttrs:
         if region_attr is not None and region_attr.with_variants_in_gene is not None:
@@ -443,6 +455,21 @@ class Coordinator:
                     region_attr.with_variants_in_gene = None
                     region_attr.with_variants_in_reg = interval
         return region_attr
+
+    # noinspection PyMethodMayBeStatic
+    def count_males_females(self, selectable_stmt_with_gender):
+        females_and_males_stmt = \
+            select([column(Vocabulary.GENDER.name), func.count(column(Vocabulary.GENDER.name))]) \
+            .select_from(selectable_stmt_with_gender) \
+            .group_by(column(Vocabulary.GENDER.name))
+
+        def do_with_connection(connection):
+            return [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
+
+        females_and_males = database.try_py_function(do_with_connection)
+        females = next((el[1] for el in females_and_males if el[0] == 'female'), 0)
+        males = next((el[1] for el in females_and_males if el[0] == 'male'), 0)
+        return males, females
 
     def try_catch_source_errors(self, fun, alternative_return_value, container_of_notices: List[Notice]):
         # noinspection PyBroadException

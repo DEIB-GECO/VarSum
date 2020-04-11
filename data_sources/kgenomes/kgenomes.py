@@ -138,10 +138,15 @@ class KGenomes(Source):
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
                                    freq_threshold: float, limit_result: int) -> FromClause:
+        # temporary fix for duplicated variants and wrong ones  # TODO delete this
+        if ascending:
+            freq_threshold = max(0.00001, freq_threshold or 0.0)  # avoid frequency 0
+        else:
+            freq_threshold = min(1.0, freq_threshold or 1.0)   # avoid frequency > 1
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
-        self.create_table_of_meta(['item_id'])
+        self.create_table_of_meta(['item_id', 'gender'])
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
         if self.my_region_t is None:
@@ -149,30 +154,39 @@ class KGenomes(Source):
                 'Before using this method, you need to assign a valid state to the region attributes at least.'
                 'Please specify some region constraint.')
 
-        # compute sample set. Actually, self.my_region_t already contains only the individuals compatible with meta_attrs,
-        # however we can ease the future operations by removing duplicates. HAVE TO MATCH sample_set_with_limit
-        sample_set = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))
+        females_and_males_stmt = \
+            select([self.my_meta_t.c.gender, func.count(self.my_meta_t.c.item_id)]) \
+            .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
+            .group_by(self.my_meta_t.c.gender)
+        females_and_males = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
+        females = next((el[1] for el in females_and_males if el[0] == 'female'), 0)
+        males = next((el[1] for el in females_and_males if el[0] == 'male'), 0)
+        population_size = males + females
 
-        # reduce size of join with genomes table
+        # reduce size of the join with genomes table
         genomes_red = select(
             [genomes.c.item_id, genomes.c.chrom, genomes.c.start, genomes.c.ref, genomes.c.alt, genomes.c.al1,
              genomes.c.al2])\
             .alias('variants_few_columns')
 
-        population_size = \
-            connection.execute(select([func.count().distinct()]).select_from(sample_set.alias())).fetchone().values()[0]
-        # defines custom functions
+        # custom functions
         func_occurrence = (func.sum(genomes_red.c.al1) + func.sum(func.coalesce(genomes_red.c.al2, 0))).label(
             Vocabulary.OCCURRENCE.name)
         func_positive_donors = func.count(genomes_red.c.item_id).label(Vocabulary.POSITIVE_DONORS.name)
-        func_frequency = func.rr.mut_frequency(func_occurrence, population_size, genomes_red.c.chrom).label(
-            Vocabulary.FREQUENCY.name)
+        if meta_attrs.assembly == 'hg19':
+            func_frequency_new = func.rr.mut_frequency_new_hg19(func_occurrence, males, females, genomes_red.c.chrom,
+                                                                genomes_red.c.start)
+        else:
+            func_frequency_new = func.rr.mut_frequency_new_grch38(func_occurrence, males, females, genomes_red.c.chrom,
+                                                                  genomes_red.c.start)
+        func_frequency_new = func_frequency_new.label(Vocabulary.FREQUENCY.name)
 
-        # I know it doesn't make sense LIMIT(population_size). But this + SET enable_seqscan=false can force the DB
-        # engine to use the index. SET enable_seqscan=false alone is not enough :(
+        # Actually, self.my_region_t already contains only the individuals compatible with meta_attrs, but it can contain
+        # duplicated item_id. Since we want to join, it's better to remove them.
         sample_set_with_limit = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id])) \
             .limit(population_size) \
             .alias('sample_set')
+        # LIMIT is part of a trick used to speed up the job. See later
 
         stmt = select([genomes_red.c.chrom.label(Vocabulary.CHROM.name),
                        genomes_red.c.start.label(Vocabulary.START.name),
@@ -181,31 +195,37 @@ class KGenomes(Source):
                        cast(literal(population_size), types.Integer).label(Vocabulary.POPULATION_SIZE.name),
                        func_occurrence,
                        func_positive_donors,
-                       func_frequency]) \
+                       func_frequency_new]) \
             .select_from(genomes_red.join(
                 sample_set_with_limit,
                 genomes_red.c.item_id == sample_set_with_limit.c.item_id)) \
             .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt)
+        # temporary fix for duplicated variants # TODO delete this
+        stmt = stmt.having(
+            func_occurrence <= females*2 + males
+        )
         if ascending:
             if freq_threshold:
-                stmt = stmt.having(func_frequency >= freq_threshold)
-            stmt = stmt.order_by(asc(func_frequency), asc(func_occurrence)) \
-                .limit(limit_result)
+                stmt = stmt.having(func_frequency_new >= freq_threshold)
+            stmt = stmt.order_by(asc(func_frequency_new), asc(func_occurrence))
         else:
             if freq_threshold:
-                stmt = stmt.having(func_frequency <= freq_threshold)
-            stmt = stmt.order_by(desc(func_frequency), desc(func_occurrence)) \
-                .limit(limit_result)
-        self.logger.debug(f'KGenomes: request rank_variants_by_frequency/ for a population of {population_size} individuals')
+                stmt = stmt.having(func_frequency_new <= freq_threshold)
+            stmt = stmt.order_by(desc(func_frequency_new), desc(func_occurrence))
+        stmt = stmt.limit(limit_result)
+        self.logger.debug(f'KGenomes: request /rank_variants_by_frequency for a population of {population_size} individuals')
+
+        # this + LIMIT in sample_set_with_limit make the trick to force using the index, but only up to 149 individuals
+        if population_size <= 149:  # 333 is the population size at which the execution time w index matches that w/o index
+            connection.execute('SET SESSION enable_seqscan=false')
+
         # create result table
-        if population_size <= 333:  # 333 is the population size at which the execution time w index matches that w/o index
-            connection.execute('SET SESSION enable_seqscan=false')  # this + LIMIT force use the index on genomes table up to 149 individuals
         if self.log_sql_commands:
             self.logger.debug('KGenomes: RANKING VARIANTS IN SAMPLE SET')
         t_name = utils.random_t_name_w_prefix('ranked_variants')
         utils.create_table_as(t_name, stmt, default_schema_to_use_name, connection, self.log_sql_commands, self.logger.debug)
         result = Table(t_name, db_meta, autoload=True, autoload_with=connection, schema=default_schema_to_use_name)
-        connection.invalidate()  # do not recycle this connection (instead of setting seqscan=true)
+        connection.invalidate()  # instead of setting seqscan=true discard this connection
         return result
 
     def values_of_attribute(self, connection, attribute: Vocabulary):
