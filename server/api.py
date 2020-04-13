@@ -34,6 +34,8 @@ class ReqParamKeys:
 
     TARGET_VARIANT = 'target_variant'
 
+    INCLUDE_DOWNLOAD_URL = 'donors_download_url'
+
     CHROM = 'chrom'
     START = 'start'
     STOP = 'stop'
@@ -70,7 +72,7 @@ def donor_distribution(body):
     def go():
         req_logger.info(f'new request to /donor_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger).donor_distribution(params[2], params[0], params[1])
+        result = Coordinator(req_logger).donor_distribution(params[2], params[0], params[1], params[7])
         return result_if_not_none(result, req_logger)
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -216,7 +218,9 @@ def prepare_body_parameters(body):
         out_max_frequency = output.get(ReqParamKeys.OUT_MAX_FREQUENCY)
         out_min_frequency = output.get(ReqParamKeys.OUT_MIN_FREQUENCY)
 
-    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency
+    include_download_url = body.get(ReqParamKeys.INCLUDE_DOWNLOAD_URL) or False
+
+    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency, include_download_url
 
 
 def parse_to_mutation_array(dict_array_of_mutations):

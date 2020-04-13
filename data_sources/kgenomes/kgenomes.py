@@ -20,6 +20,7 @@ db_meta: Optional[MetaData] = None
 initializing_lock = RLock()
 metadata: Optional[Table] = None
 genomes: Optional[Table] = None
+public_item: Optional[Table] = None
 
 
 class KGenomes(Source):
@@ -67,7 +68,8 @@ class KGenomes(Source):
         self.my_region_t: Optional[Table] = None
 
     # SOURCE INTERFACE
-    def donors(self, connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> Selectable:
+    def donors(self, connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
+               with_download_urls: bool) -> Selectable:
         """
         Assembles a query statement that, when executed, returns a table containing for each individual matching the
         requirements in meta_attrs and region_attrs, the attributes in "by_attributes"
@@ -82,11 +84,15 @@ class KGenomes(Source):
 
         # compute statistics
         columns_of_interest = [self.my_meta_t.c[self.meta_col_map[attr]].label(attr.name) for attr in by_attributes]
+        if with_download_urls:
+            columns_of_interest.append(public_item.c.local_url.label(Vocabulary.DOWNLOAD_URL.name))
         stmt = select(columns_of_interest)
         if self.my_region_t is not None:
             stmt = stmt.where(self.my_meta_t.c.item_id.in_(
                 select([self.my_region_t.c.item_id]).distinct()
             ))
+        if with_download_urls:
+            stmt = stmt.where(self.my_meta_t.c.item_id == public_item.c.item_id)
         if self.log_sql_commands:
             utils.show_stmt(self.connection, stmt, self.logger.debug, 'KGENOMES: STMT DONORS WITH REQUIRED ATTRIBUTES')
         return stmt
@@ -319,10 +325,11 @@ class KGenomes(Source):
         global initializing_lock
         global metadata
         global genomes
+        global public_item
         global db_meta
-        if metadata is None or genomes is None:
+        if metadata is None or genomes is None or public_item is None:
             initializing_lock.acquire(True)
-            if metadata is None or genomes is None:
+            if metadata is None or genomes is None or public_item is None:
                 logger.debug('initializing tables for class KGenomes')
                 # reflect already existing tables (u can access columns as <table>.c.<col_name> or <table>.c['<col_name>'])
                 db_meta = MetaData()
@@ -339,6 +346,11 @@ class KGenomes(Source):
                                     autoload=True,
                                     autoload_with=connection,
                                     schema=default_region_schema_name)
+                    public_item = Table('item',
+                                        db_meta,
+                                        autoload=True,
+                                        autoload_with=connection,
+                                        schema='public')
                 finally:
                     initializing_lock.release()
                     if connection is not None:

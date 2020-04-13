@@ -118,18 +118,9 @@ class MetadataAttrs:
                  dna_source: Optional[list] = None,
                  assembly: str = None,
                  population: Optional[list] = None,
-                 super_population: Optional[list] = None,
-                 something_else: Optional['str'] = None):
+                 super_population: Optional[list] = None):
         self.free_dimensions = []
         self.constrained_dimensions = []
-
-        # TODO REMOVE
-        if something_else:
-            self.something_else = something_else
-            self.constrained_dimensions.append(Vocabulary.SOMETHING_ELSE)
-        else:
-            self.something_else = None
-            self.free_dimensions.append(Vocabulary.SOMETHING_ELSE)
 
         if gender:
             self.gender = gender
@@ -182,7 +173,7 @@ class Vocabulary(Enum):
     ASSEMBLY = 4
     POPULATION = 5
     SUPER_POPULATION = 6
-    SOMETHING_ELSE = 7  # TODO remove
+    DOWNLOAD_URL = 7
     DONOR_ID = 8
 
     # dimensions of region kind

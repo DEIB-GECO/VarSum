@@ -25,7 +25,8 @@ class Coordinator:
     def __init__(self, request_logger):
         self.logger = request_logger
 
-    def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> dict:
+    def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
+                           with_download_url: bool) -> dict:
         region_attrs = self.resolve_gene_into_interval(region_attrs)
         eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
     
@@ -51,9 +52,12 @@ class Coordinator:
                         select_from_source_output.append(column(elem.name))
                     else:
                         select_from_source_output.append(cast(literal(Vocabulary.unknown.name), types.String).label(elem.name))
+
+                if with_download_url:
+                    select_from_source_output.append(column(Vocabulary.DOWNLOAD_URL.name))
     
                 def donors(a_connection):
-                    source_stmt = obj.donors(a_connection, selectable_attributes, meta_attrs, region_attrs)\
+                    source_stmt = obj.donors(a_connection, selectable_attributes, meta_attrs, region_attrs, with_download_url)\
                         .alias(source.__name__)
                     return \
                         select(select_from_source_output) \
@@ -72,10 +76,15 @@ class Coordinator:
         else:
             # aggregate the results of all the queries
             by_attributes_as_columns = [column(att.name) for att in by_attributes]
+            if with_download_url:
+                download_col = [func.string_agg(column(Vocabulary.DOWNLOAD_URL.name), ', ').label(Vocabulary.DOWNLOAD_URL.name)]
+            else:
+                download_col = []
             stmt = \
                 select(
                     by_attributes_as_columns +
-                    [func.count(column(Vocabulary.DONOR_ID.name)).label('DONORS')]
+                    [func.count(column(Vocabulary.DONOR_ID.name)).label('DONORS')] +
+                    download_col
                 )\
                 .select_from(union(*from_sources).alias("all_sources"))\
                 .group_by(func.cube(*by_attributes_as_columns))

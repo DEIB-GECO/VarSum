@@ -34,7 +34,6 @@ hg19_healthy_female_BEB = MetadataAttrs(gender='female',
                                         assembly='hg19',
                                         population=['BEB'],
                                         super_population=None)
-something_else = MetadataAttrs(something_else='bla')
 
 # FILTER BY METADATA
 # db.meta_attrs = hg19_healthy_SAS

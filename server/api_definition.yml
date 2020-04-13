@@ -80,6 +80,8 @@ paths:
               properties:
                 distribute_by:
                   $ref: '#/components/schemas/DistributeBy'
+                donors_download_url:
+                  type: boolean
                 having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 having_variants:
