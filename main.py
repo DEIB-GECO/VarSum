@@ -2,15 +2,22 @@ import sys
 import database.database as database
 from loguru import logger
 
-run = sys.argv[1]
-db_user = sys.argv[2]
-db_password = sys.argv[3]
-db_port = sys.argv[4]
+wrong_arguments_message = 'The first program argument must be either "server" or "tests" followed by database username, ' \
+                          'password and port. Lastly, the severity level of the log messages to see on the console.'
+try:
+    run = sys.argv[1]
+    db_user = sys.argv[2]
+    db_password = sys.argv[3]
+    db_port = sys.argv[4]
+    output_log_lvl = sys.argv[5]
+except Exception:
+    logger.error(wrong_arguments_message)
+    sys.exit(1)
 
 logger.remove()  # removes default logger to stderr with level DEBUG
 # log to stderr only messages with level INFO or above (exceptions are level ERROR, thus included)
 logger.add(sys.stderr,
-           level='INFO',
+           level=output_log_lvl,
            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
                   "<blue>{extra[request_id]}</blue> | "
                   "<level>{level: <8}</level> | "
@@ -47,4 +54,4 @@ if __name__ == '__main__':
         # noinspection PyUnresolvedReferences
         import tests.tests                              # this runs anything is in the tests.py module
     else:
-        logger.critical('The first program argument must be either "server" or "tests" followed by database username, password and port.')
+        logger.critical(wrong_arguments_message)
