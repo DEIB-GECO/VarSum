@@ -335,6 +335,8 @@ class KGenomes(Source):
                 db_meta = MetaData()
                 connection = None
                 try:
+                    import warnings
+                    from sqlalchemy.exc import SAWarning
                     connection = database.check_and_get_connection()
                     metadata = Table(default_metadata_table_name,
                                      db_meta,
@@ -346,11 +348,13 @@ class KGenomes(Source):
                                     autoload=True,
                                     autoload_with=connection,
                                     schema=default_region_schema_name)
-                    public_item = Table('item',
-                                        db_meta,
-                                        autoload=True,
-                                        autoload_with=connection,
-                                        schema='public')
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=SAWarning)
+                        public_item = Table('item',
+                                            db_meta,
+                                            autoload=True,
+                                            autoload_with=connection,
+                                            schema='public')
                 finally:
                     initializing_lock.release()
                     if connection is not None:
