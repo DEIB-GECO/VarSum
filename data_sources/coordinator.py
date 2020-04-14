@@ -77,7 +77,9 @@ class Coordinator:
             # aggregate the results of all the queries
             by_attributes_as_columns = [column(att.name) for att in by_attributes]
             if with_download_url:
-                download_col = [func.string_agg(column(Vocabulary.DOWNLOAD_URL.name), ', ').label(Vocabulary.DOWNLOAD_URL.name)]
+                download_col = [func.string_agg(
+                    func.concat(column(Vocabulary.DOWNLOAD_URL.name), '?authToken=DOWNLOAD-TOKEN'),
+                    ', ').label(Vocabulary.DOWNLOAD_URL.name)]
             else:
                 download_col = []
             stmt = \
@@ -88,8 +90,15 @@ class Coordinator:
                 )\
                 .select_from(union(*from_sources).alias("all_sources"))\
                 .group_by(func.cube(*by_attributes_as_columns))
-    
-            return self.get_as_dictionary(stmt, 'DONOR DISTRIBUTION', notices)
+
+            result = self.get_as_dictionary(stmt, 'DONOR DISTRIBUTION', notices)
+            if with_download_url:
+                rows = result['rows']
+                for row in rows:
+                    # here "row" is the string concatenation of all the sample urls in this group
+                    row[-1] = row[-1].replace("www.gmql.eu", "genomic.deib.polimi.it")
+                    row[-1] = row[-1].replace('.gdm', '')
+            return result
 
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
         region_attrs = self.resolve_gene_into_interval(region_attrs)
