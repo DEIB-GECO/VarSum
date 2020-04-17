@@ -81,12 +81,13 @@ class Source:
         """
         raise NotImplementedError('Any subclass of Source must implement the abstract method "values_of_attribute".')
 
-    def get_variant_details(self, connection, variant: Mutation, which_details: List[Vocabulary]) -> List:
+    def get_variant_details(self, connection, variant: Mutation, which_details: List[Vocabulary], assembly) -> List:
         """
         Given the "variant", the source must return a list of the values of the properties in "which_details" in the
         same order. If a property is not available, return Vocabulary.unknown.name in place of the unknown value.
         A common use case for this method is that in which it is requested to know the region coordinates
         of a variant of which only the id is known.
+        :param assembly:
         :param connection:
         :param variant:
         :param which_details:
@@ -95,10 +96,11 @@ class Source:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "get_variant_details".')
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
-                           output_region_attrs: List[Vocabulary]) -> FromClause:
+                           output_region_attrs: List[Vocabulary], assembly: str) -> FromClause:
         """
         The source must return a table or a statement selecting the variants located inside the given "genomic_interval".
         Each variant must be provided with the "output_region_attrs" requested.
+        :param assembly:
         :param connection:
         :param genomic_interval:
         :param output_region_attrs:

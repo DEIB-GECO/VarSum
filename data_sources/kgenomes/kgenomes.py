@@ -626,13 +626,18 @@ class KGenomes(Source):
         return Table(generated_view_name, db_meta, autoload=True, autoload_with=self.connection,
                      schema=default_schema_to_use_name)
 
-    def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval, output_region_attrs: List[Vocabulary]) -> Selectable:
+    def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
+                           output_region_attrs: List[Vocabulary], assembly) -> Selectable:
         select_columns = [genomes.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]
         stmt =\
             select(select_columns).distinct() \
             .where((genomes.c.start >= genomic_interval.start) &
                    (genomes.c.start <= genomic_interval.stop) &
-                   (genomes.c.chrom == genomic_interval.chrom))
+                   (genomes.c.chrom == genomic_interval.chrom)) \
+            .where(genomes.c.item_id.in_(
+                select([metadata.c.item_id])
+                .where(metadata.c.assembly == assembly)
+            ))
         if self.log_sql_commands:
             utils.show_stmt(connection, stmt, self.logger.debug, f'KGenomes: VARIANTS IN REGION '
                                                                  f'{genomic_interval.chrom}'
@@ -685,7 +690,8 @@ class KGenomes(Source):
             chrom_query = select([genomes.c.chrom]).where(genomes.c.id == variant.id).limit(1)
             return connection.execute(chrom_query).fetchone().values()[0]
 
-    def get_variant_details(self, connection: Connection, variant: Mutation, which_details: List[Vocabulary]) -> list:
+    def get_variant_details(self, connection: Connection, variant: Mutation, which_details: List[Vocabulary],
+                            assembly) -> list:
         self.connection = connection
         global genomes
         select_columns = []
@@ -701,7 +707,11 @@ class KGenomes(Source):
             stmt = stmt.where((genomes.c.chrom == variant.chrom) &
                               (genomes.c.start == variant.start) &
                               (genomes.c.ref == variant.ref) &
-                              (genomes.c.alt == variant.alt))
+                              (genomes.c.alt == variant.alt)) \
+                .where(genomes.c.item_id.in_(
+                    select([metadata.c.item_id])
+                    .where(metadata.c.assembly == assembly)
+            ))
         else:
             stmt = stmt.where(genomes.c.id == variant.id)
         if self.log_sql_commands:

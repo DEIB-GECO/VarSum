@@ -34,7 +34,7 @@ class VariantUndefined(Exception):
 class GenomicInterval:
     def __init__(self, chrom: int, start: int, stop: int, strand: Optional[int] = None):
         if strand is not None and not (strand == 1 or strand == -1):
-            raise GenomicIntervalUndefined('When present, the strand of a genomic interval can have only values 1 and -1')
+            raise GenomicIntervalUndefined('When present, the strand of a genomic interval can have only values 1 and -1.')
         if chrom is None or start is None or stop is None:
             raise GenomicIntervalUndefined('A genomic interval needs at least the attributes chrom, start, stop '
                                            f'to have non-null values. Instead {str(chrom)}, {str(start)}, {str(stop)} '

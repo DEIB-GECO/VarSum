@@ -1,4 +1,7 @@
+from prettytable import PrettyTable
+
 from data_sources.io_parameters import *
+from data_sources.coordinator import Coordinator
 import database.db_utils as db_utils
 from loguru import logger
 
@@ -145,7 +148,14 @@ hg19_healthy_female_BEB = MetadataAttrs(gender='female',
 # meta = io_param.MetadataAttrs(gender='a', health_status='a', dna_source=['a'], assembly='a', population=['a'], super_population=['a'])
 # region = io_param.RegionAttrs(with_variants=['a'], with_variants_same_c_copy=['a'], with_variants_diff_c_copy=['a'])
 
-by_attributes = [Vocabulary.POPULATION, Vocabulary.SOMETHING_ELSE]
+by_attributes = [Vocabulary.POPULATION]
+
+
+def print_output_table(output_dictionary):
+    pretty_table = PrettyTable(output_dictionary['columns'])
+    for row in output_dictionary['rows']:
+        pretty_table.add_row(row)
+    print(pretty_table)
 
 
 def test_disable_seqscan_and_connection_recycle():
@@ -225,7 +235,7 @@ def variant_details_without_coordinator():
     ]
 
     def do(connection):
-        res = source.get_variant_details(connection, mut1, ask_for)
+        res = source.get_variant_details(connection, mut1, ask_for, 'hg19')
         print(res)
     database.try_py_function(do)
 
@@ -242,6 +252,18 @@ def gencode_find_gene_without_coordinator():
         db_utils.print_query_result(result)
     database.try_py_function(do)
 
+
+with_annotations = [
+        Vocabulary.CHROM,
+        Vocabulary.START,
+        Vocabulary.STOP,
+        Vocabulary.STRAND,
+        Vocabulary.GENE_NAME,
+        Vocabulary.GENE_TYPE
+    ]
+# print_output_table(Coordinator(logger).annotate_interval(GenomicInterval(1, 29500, 50000), with_annotations, 'hg19'))
+print_output_table(Coordinator(logger).annotate_variant(GenomicInterval(1, 29500, 50000), with_annotations, 'hg19'))
+
 # result_proxy = coordinator.donor_distribution(by_attributes, hg19_healthy_female_BEB, None)
 # result_proxy = coordinator.donor_distribution([Vocabulary.SUPER_POPULATION], MetadataAttrs(assembly='hg19', super_population=['AFR', 'SAS']), None)
 
@@ -251,3 +273,5 @@ def gencode_find_gene_without_coordinator():
 # result_proxy = coordinator.most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
 # db_utils.print_query_result(result_proxy)
 # print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
+
+

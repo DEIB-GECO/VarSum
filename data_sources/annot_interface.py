@@ -13,10 +13,10 @@ class AnnotInterface:
         self.logger = logger_instance
 
     def annotate(self, connection: Connection, genomic_interval: GenomicInterval,
-                 attrs: Optional[List[Vocabulary]]) -> FromClause:
+                 attrs: Optional[List[Vocabulary]], assembly: str) -> FromClause:
         raise NotImplementedError('Any subclass of AnnotInterface must implement the abstract method "annotate"')
 
-    def find_gene_region(self, connection: Connection, gene: Gene, output_attrs: List[Vocabulary]) -> FromClause:
+    def find_gene_region(self, connection: Connection, gene: Gene, output_attrs: List[Vocabulary], assembly: str) -> FromClause:
         raise NotImplementedError('Any subclass of AnnotInterface must implement the abstract method "find_gene_region"')
 
     def values_of_attribute(self, connection, attribute: Vocabulary) -> List:

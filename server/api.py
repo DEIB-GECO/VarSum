@@ -131,15 +131,15 @@ def annotate(body):
         Vocabulary.GENE_NAME,
         Vocabulary.GENE_TYPE
     ]
-
+    # TODO request also the assembly
     def go():
         req_logger.info(f'new request to /annotate with request_body: {body}')
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = Coordinator(req_logger).annotate_interval(interval, with_annotations)
+            result = Coordinator(req_logger).annotate_interval(interval, with_annotations, 'hg19')
         else:
             variant = parse_variant_from_dict(body)
-            result = Coordinator(req_logger).annotate_variant(variant, with_annotations)
+            result = Coordinator(req_logger).annotate_variant(variant, with_annotations, 'hg19')
         return result_if_not_none(result, req_logger)
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -150,10 +150,10 @@ def variants_in_region(body):
         req_logger.info(f'new request to /variants_in_region with request_body: {body}')
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = Coordinator(req_logger).variants_in_genomic_interval(interval)
+            result = Coordinator(req_logger).variants_in_genomic_interval(interval, 'hg19')
         else:
             gene = parse_gene_from_dict(body)
-            result = Coordinator(req_logger).variants_in_gene(gene)
+            result = Coordinator(req_logger).variants_in_gene(gene, 'hg19')
         return result_if_not_none(result, req_logger)
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)

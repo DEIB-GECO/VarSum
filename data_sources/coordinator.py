@@ -27,7 +27,7 @@ class Coordinator:
 
     def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
                            with_download_url: bool) -> dict:
-        region_attrs = self.resolve_gene_into_interval(region_attrs)
+        region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -101,7 +101,7 @@ class Coordinator:
             return result
 
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
-        region_attrs = self.resolve_gene_into_interval(region_attrs)
+        region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -141,7 +141,7 @@ class Coordinator:
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources) + 1) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
             if variant.chrom is None:
-                region_of_variant = executor.submit(self.get_region_of_variant, variant).result()
+                region_of_variant = executor.submit(self.get_region_of_variant, variant, meta_attrs.assembly).result()
             else:
                 region_of_variant = [variant.chrom, variant.start, variant.start+1]  # stop is fake but I don't need it anyway
     
@@ -179,7 +179,7 @@ class Coordinator:
 
     def rank_variants_by_freq(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
                               out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> dict:
-        region_attrs = self.resolve_gene_into_interval(region_attrs)
+        region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         limit_result = limit_result or 10
         eligible_sources = [source for source in _sources if
                             source.can_express_constraint(meta_attrs, region_attrs, source.rank_variants_by_frequency)]
@@ -267,11 +267,11 @@ class Coordinator:
                 result['notice'] = [notice.args for notice in notices]
             return result
 
-    def annotate_variant(self, variant: Mutation, annot_types: List[Vocabulary]) -> dict:
-        region_of_variant = self.get_region_of_variant(variant)
-        return self.annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types)
+    def annotate_variant(self, variant: Mutation, annot_types: List[Vocabulary], assembly: str) -> dict:
+        region_of_variant = self.get_region_of_variant(variant, assembly)
+        return self.annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types, assembly)
 
-    def annotate_interval(self, interval: GenomicInterval, annot_types: List[Vocabulary]) -> dict:
+    def annotate_interval(self, interval: GenomicInterval, annot_types: List[Vocabulary], assembly: str) -> dict:
         which_annotations = set(annot_types)
         eligible_sources = [_source for _source in _annotation_sources
                             if not which_annotations.isdisjoint(_source.get_available_annotation_types())]
@@ -294,7 +294,7 @@ class Coordinator:
                             cast(literal(Vocabulary.unknown.name), types.String).label(elem.name))
     
                 def annotate_region(connection: Connection):
-                    source_stmt = obj.annotate(connection, interval, selectable_attributes).alias(source.__name__)
+                    source_stmt = obj.annotate(connection, interval, selectable_attributes, assembly).alias(source.__name__)
                     return \
                         select(select_from_source_output)\
                         .select_from(source_stmt)
@@ -318,49 +318,11 @@ class Coordinator:
     
             return self.get_as_dictionary(stmt, 'ANNOTATE GENOMIC INTERVAL', notices)
 
-    def variants_in_gene(self, gene: Gene) -> dict:
-        select_from_sources = [
-            Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
-        ]
-        select_from_sources_as_set = set(select_from_sources)
-        eligible_sources = [_source for _source in _annotation_sources
-                            if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
-    
-        notices = list()
-    
-        def ask_to_source(source):
-            def do():
-                obj: AnnotInterface = source(self.logger)
-    
-                def var_in_gene(connection: Connection) -> FromClause:
-                    return obj.find_gene_region(connection, gene, select_from_sources)
-    
-                return database.try_py_function(var_in_gene)
-            return self.try_catch_source_errors(do, None, notices)
-    
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
-            from_sources = executor.map(ask_to_source, eligible_sources)
-    
-        # remove failures
-        from_sources = [result for result in from_sources if result is not None]
-        if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
-        else:
-            merge_regions = \
-                select(['*']) \
-                .select_from(union(*from_sources).alias('all_annot_sources'))
-    
-            result = self.get_as_dictionary(merge_regions, 'FIND GENE', notices)
-            if len(result['rows']) > 1:
-                result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
-                raise AskUserIntervention(result, 300)
-            elif len(result['rows']) == 0:
-                raise AskUserIntervention('No record in our database corresponds to the given gene parameters.', 404)
-            else:
-                genomic_interval = result['rows'][0]
-                return self.variants_in_genomic_interval(GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None))
+    def variants_in_gene(self, gene: Gene, assembly: str) -> dict:
+        genomic_interval = self.resolve_gene_interval(gene, assembly)
+        return self.variants_in_genomic_interval(genomic_interval, assembly)
 
-    def variants_in_genomic_interval(self, interval: GenomicInterval) -> dict:
+    def variants_in_genomic_interval(self, interval: GenomicInterval, assembly: str) -> dict:
         eligible_sources = _sources
         select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
     
@@ -371,7 +333,7 @@ class Coordinator:
                 obj: Source = source(self.logger)
     
                 def variant_in_region(connection: Connection):
-                    return obj.variants_in_region(connection, interval, select_attrs)
+                    return obj.variants_in_region(connection, interval, select_attrs, assembly)
     
                 return database.try_py_function(variant_in_region)
             return self.try_catch_source_errors(do, None, notices)
@@ -393,8 +355,9 @@ class Coordinator:
             return self.get_as_dictionary(stmt, 'VARIANTS IN GENOMIC INTERVAL', notices)
 
     #   HELPER METHODS  #
-    def get_region_of_variant(self, variant):
-        """Returns an array of values corresponding to CHROM, START, STOP of this variant. """
+    def get_region_of_variant(self, variant: Mutation, assembly: str):
+        """Returns an array of values corresponding to CHROM, START, STOP of this variant.
+        """
         notices = list()
 
         def ask_to_source(source):
@@ -403,7 +366,7 @@ class Coordinator:
 
                 def get_region(connection):
                     return obj.get_variant_details(connection, variant,
-                                                   [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP])
+                                                   [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP], assembly)
 
                 return database.try_py_function(get_region)
 
@@ -428,51 +391,53 @@ class Coordinator:
             # they're equivalent
             return from_sources[0]
 
-    def resolve_gene_into_interval(self, region_attr: Optional[RegionAttrs]) -> RegionAttrs:
+    def replace_gene_with_interval(self, region_attr: Optional[RegionAttrs], assembly) -> RegionAttrs:
         if region_attr is not None and region_attr.with_variants_in_gene is not None:
-            select_from_sources = [
-                Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
-            ]
-            select_from_sources_as_set = set(select_from_sources)
-            eligible_sources = [_source for _source in _annotation_sources
-                                if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
-    
-            notices = list()
-    
-            def ask_to_source(source):
-                def do():
-                    obj: AnnotInterface = source(self.logger)
-    
-                    def var_in_gene(connection: Connection) -> FromClause:
-                        return obj.find_gene_region(connection, region_attr.with_variants_in_gene, select_from_sources)
-    
-                    return database.try_py_function(var_in_gene)
-                return self.try_catch_source_errors(do, None, notices)
-    
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
-                from_sources = executor.map(ask_to_source, eligible_sources)
-    
-            # remove failures
-            from_sources = [result for result in from_sources if result is not None]
-            if len(from_sources) == 0:
-                raise NoDataFromSources(notices)
-            else:
-                merge_regions = \
-                    select(['*']) \
-                    .select_from(union(*from_sources).alias('all_annot_sources'))
-    
-                result = self.get_as_dictionary(merge_regions, 'FIND GENE', notices)
-                if len(result['rows']) > 1:
-                    result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
-                    raise AskUserIntervention(result, 300)
-                elif len(result['rows']) == 0:
-                    raise AskUserIntervention('No record in our database corresponds to the given gene parameters.', 404)
-                else:
-                    genomic_interval = result['rows'][0]
-                    interval = GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None)
-                    region_attr.with_variants_in_gene = None
-                    region_attr.with_variants_in_reg = interval
+            region_attr.with_variants_in_reg = self.resolve_gene_interval(region_attr.with_variants_in_gene, assembly)
+            region_attr.with_variants_in_gene = None
         return region_attr
+
+    def resolve_gene_interval(self, gene: Gene, assembly) -> GenomicInterval:
+        select_from_sources = [
+            Vocabulary.GENE_TYPE, Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.GENE_ID
+        ]
+        select_from_sources_as_set = set(select_from_sources)
+        eligible_sources = [_source for _source in _annotation_sources
+                            if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
+
+        notices = list()
+
+        def ask_to_source(source):
+            def do():
+                obj: AnnotInterface = source(self.logger)
+
+                def var_in_gene(connection: Connection) -> FromClause:
+                    return obj.find_gene_region(connection, gene, select_from_sources, assembly)
+
+                return database.try_py_function(var_in_gene)
+            return self.try_catch_source_errors(do, None, notices)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
+            from_sources = executor.map(ask_to_source, eligible_sources)
+
+        # remove failures
+        from_sources = [result for result in from_sources if result is not None]
+        if len(from_sources) == 0:
+            raise NoDataFromSources(notices)
+        else:
+            merge_regions = \
+                select(['*']) \
+                .select_from(union(*from_sources).alias('all_annot_sources'))
+
+            result = self.get_as_dictionary(merge_regions, 'FIND GENE', notices)
+            if len(result['rows']) > 1:
+                result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
+                raise AskUserIntervention(result, 300)
+            elif len(result['rows']) == 0:
+                raise AskUserIntervention('No record in our database corresponds to the given gene parameters.', 404)
+            else:
+                genomic_interval = result['rows'][0]
+                return GenomicInterval(genomic_interval[1], genomic_interval[2], genomic_interval[3], strand=None)
 
     # noinspection PyMethodMayBeStatic
     def count_males_females(self, selectable_stmt_with_gender):
