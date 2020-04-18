@@ -707,13 +707,13 @@ class KGenomes(Source):
             stmt = stmt.where((genomes.c.chrom == variant.chrom) &
                               (genomes.c.start == variant.start) &
                               (genomes.c.ref == variant.ref) &
-                              (genomes.c.alt == variant.alt)) \
-                .where(genomes.c.item_id.in_(
-                    select([metadata.c.item_id])
-                    .where(metadata.c.assembly == assembly)
-            ))
+                              (genomes.c.alt == variant.alt))
         else:
             stmt = stmt.where(genomes.c.id == variant.id)
+        stmt = stmt.where(genomes.c.item_id.in_(
+                select([metadata.c.item_id])
+                .where(metadata.c.assembly == assembly)
+        ))
         if self.log_sql_commands:
             utils.show_stmt(connection, stmt, self.logger.debug, 'GET VARIANT DETAILS')
         result = connection.execute(stmt)
