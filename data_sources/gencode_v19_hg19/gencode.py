@@ -1,4 +1,4 @@
-from sqlalchemy import MetaData, Table, select
+from sqlalchemy import MetaData, Table, select, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import Selectable
 from typing import List
@@ -9,14 +9,18 @@ import database.db_utils as utils
 from threading import RLock
 from loguru import logger
 
-hg19_table_name = 'hg19_gencode_v19_red'
+table_name = 'gencode_red'
 table_schema = 'rr'
+item_source_id_gencode_gene_grch38 = 'Gencode_GRCh38_v27_gene'
+item_source_id_gencode_gene_hg19 = 'Gencode_hg19_v10_gene'
 initializing_lock = RLock()
-hg19_ann_table: Optional[Table] = None
+item_id_assembly_hg19: Optional[int] = None
+item_id_assembly_grch38: Optional[int] = None
+ann_table: Optional[Table] = None
 db_meta: MetaData
 
 
-class GencodeV19HG19(AnnotInterface):
+class Gencode(AnnotInterface):
 
     log_sql_statements: bool = True
     # MAP ATTRIBUTE NAMES TO TABLE COLUMN NAMES
@@ -44,29 +48,31 @@ class GencodeV19HG19(AnnotInterface):
         :return: a statement that when executed returns the annotation data requested.
         """
         self.connection = connection
-        table = self.table_for_assembly(assembly)
-        columns_of_interest = [table.c[self.col_map[attr]].label(attr.name) for attr in attrs]
+        columns_of_interest = [ann_table.c[self.col_map[attr]].label(attr.name) for attr in attrs]
         stmt = \
             select(columns_of_interest) \
-            .where((table.c.start <= genomic_interval.stop) &
-                   (table.c.stop >= genomic_interval.start) &
-                   (table.c.chrom == genomic_interval.chrom))
+            .where((ann_table.c.start <= genomic_interval.stop) &
+                   (ann_table.c.stop >= genomic_interval.start) &
+                   (ann_table.c.chrom == genomic_interval.chrom))
         if genomic_interval.strand is not None and genomic_interval.strand != 0:
-            stmt = stmt.where(table.c.strand == genomic_interval.strand)
+            stmt = stmt.where(ann_table.c.strand == genomic_interval.strand)
+        item_id_for_assembly = item_id_assembly_hg19 if assembly == 'hg19' else item_id_assembly_grch38
+        stmt = stmt.where(ann_table.c.item_id == item_id_for_assembly)
         if self.log_sql_statements:
             utils.show_stmt(connection, stmt, self.logger.debug, 'GENCODE_V19_HG19: ANNOTATE REGION/VARIANT')
         return stmt
 
     def find_gene_region(self, connection: Connection, gene: Gene, output_attrs: List[Vocabulary], assembly):
         self.connection = connection
-        table = self.table_for_assembly(assembly)
-        select_columns = [table.c[self.col_map[att]].label(att.name) for att in output_attrs]
+        select_columns = [ann_table.c[self.col_map[att]].label(att.name) for att in output_attrs]
         stmt = select(select_columns)\
-            .where(table.c.gene_name == gene.name)
+            .where(ann_table.c.gene_name == gene.name)
         if gene.type_ is not None:
-            stmt = stmt.where(table.c.gene_type == gene.type_)
+            stmt = stmt.where(ann_table.c.gene_type == gene.type_)
         if gene.id_ is not None:
-            stmt = stmt.where(table.c.gene_id == gene.id_)
+            stmt = stmt.where(ann_table.c.gene_id == gene.id_)
+        item_id_for_assembly = item_id_assembly_hg19 if assembly == 'hg19' else item_id_assembly_grch38
+        stmt = stmt.where(ann_table.c.item_id == item_id_for_assembly)
         if self.log_sql_statements:
             utils.show_stmt(connection, stmt, self.logger.debug, 'GENCODE_V19_HG19: FIND GENE')
         return stmt
@@ -108,31 +114,34 @@ class GencodeV19HG19(AnnotInterface):
         }
         return distinct_values.get(self.col_map.get(attribute))
 
-    # noinspection PyMethodMayBeStatic
-    def table_for_assembly(self, assembly):
-        # TODO load also the table for grch38
-        return hg19_ann_table
-
     @staticmethod
     def init_singleton_table():
         global initializing_lock
-        global hg19_ann_table
+        global ann_table
+        global item_id_assembly_hg19
+        global item_id_assembly_grch38
         global db_meta
-        if hg19_ann_table is None:
+        if ann_table is None or item_id_assembly_grch38 is None or item_id_assembly_hg19 is None:
             # in a racing condition the lock can be acquired as first or as second.
             initializing_lock.acquire(True)
             # if I'm second, the table has been already initialized, so release the lock and exit. If I'm first proceed
-            if hg19_ann_table is None:
+            if ann_table is None or item_id_assembly_grch38 is None or item_id_assembly_hg19 is None:
                 logger.debug('initializing table for class gencode_v19_hg19')
                 db_meta = MetaData()
                 connection = None
                 try:
                     connection = database.check_and_get_connection()
-                    hg19_ann_table = Table(hg19_table_name,
-                                           db_meta,
-                                           autoload=True,
-                                           autoload_with=connection,
-                                           schema=table_schema)
+                    ann_table = Table(table_name,
+                                      db_meta,
+                                      autoload=True,
+                                      autoload_with=connection,
+                                      schema=table_schema)
+                    item_id_assembly_hg19 = connection.execute(
+                        text(f"select item_id from public.item where item_source_id = '{item_source_id_gencode_gene_hg19}'")
+                    ).scalar()
+                    item_id_assembly_grch38 = connection.execute(
+                        text(f"select item_id from public.item where item_source_id = '{item_source_id_gencode_gene_grch38}'")
+                    ).scalar()
                 finally:
                     initializing_lock.release()
                     if connection is not None:

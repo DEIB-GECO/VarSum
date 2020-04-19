@@ -2,7 +2,7 @@ from data_sources.annot_interface import AnnotInterface
 from data_sources.source_interface import *
 from data_sources.kgenomes.kgenomes import KGenomes
 from data_sources.tcga.tcga import TCGA
-from data_sources.gencode_v19_hg19.gencode_v19_hg19 import GencodeV19HG19
+from data_sources.gencode_v19_hg19.gencode import Gencode
 from typing import List, Type
 from sqlalchemy.engine import ResultProxy
 from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc
@@ -16,7 +16,7 @@ _sources: List[Type[Source]] = [
     TCGA
 ]
 _annotation_sources: List[Type[AnnotInterface]] = [
-    GencodeV19HG19
+    Gencode
 ]
 
 LOG_SQL_STATEMENTS = True

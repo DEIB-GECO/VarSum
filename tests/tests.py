@@ -5,6 +5,8 @@ from data_sources.coordinator import Coordinator
 import database.db_utils as db_utils
 from loguru import logger
 
+from data_sources.gencode_v19_hg19.gencode import *
+
 
 if __name__ == '__main__':
     import database.database as database
@@ -204,9 +206,9 @@ def kgenomes_most_common_var_without_coordinator():
 
 
 def gencode_annotate_region_without_coordinator():
-    import data_sources.gencode_v19_hg19.gencode_v19_hg19 as gencode
+    import data_sources.gencode_v19_hg19.gencode as gencode
     import database.database as database
-    source = gencode.GencodeV19HG19(logger)
+    source = gencode.Gencode(logger)
 
     def do(connection):
         stmt = source.annotate(connection, GenomicInterval(1, 55516870, 55516870, None), None)
@@ -241,9 +243,9 @@ def variant_details_without_coordinator():
 
 
 def gencode_find_gene_without_coordinator():
-    import data_sources.gencode_v19_hg19.gencode_v19_hg19 as gencode
+    import data_sources.gencode_v19_hg19.gencode as gencode
     import database.database as database
-    source = gencode.GencodeV19HG19(logger)
+    source = gencode.Gencode(logger)
 
     def do(connection):
         stmt = source.find_gene_region(connection, Gene('OR4F5'), [Vocabulary.CHROM])
@@ -294,8 +296,6 @@ def tcga_donors():
     res = database.try_py_function(do)
     db_utils.print_query_result(res)
 
-
-tcga_variants_in_region()
 
 with_annotations = [
         Vocabulary.CHROM,
