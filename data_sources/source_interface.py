@@ -59,9 +59,9 @@ class Source:
         otherwise it is the higher possible value of frequency.
         Each variant returned must be described by the columns describing the
         chromosome, start, reference, and alternative alleles. In addition to them, for each variant there must be also
-        a value indicating the size of the population (which will be the same in all the variants), the number of
-        individuals owning the variant, the number of occurrences found such variant and finally the frequency. As
-        always, refer to io_parameters.Vocabulary to find and use the appropriate names of the requested columns.
+        a value indicating the size of the population, the number of individuals owning the variant,
+        the number of occurrences found such variant and finally the frequency. As always, refer to
+        io_parameters.Vocabulary to find and use the appropriate names of the requested columns.
         :param connection:
         :param meta_attrs:
         :param region_attrs:
@@ -85,7 +85,7 @@ class Source:
         """
         Given the "variant", the source must return a list of the values of the properties in "which_details" in the
         same order. If a property is not available, return Vocabulary.unknown.name in place of the unknown value.
-        A common use case for this method is that in which it is requested to know the region coordinates
+        A common use case for this method is that for which is requested to know the region coordinates
         of a variant of which only the id is known.
         :param assembly:
         :param connection:

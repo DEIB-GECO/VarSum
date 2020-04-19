@@ -1,6 +1,6 @@
 from ..source_interface import *
 from ..io_parameters import *
-from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types
+from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types, case
 from sqlalchemy.sql.expression import Selectable
 from sqlalchemy.engine import Connection
 from functools import reduce
@@ -10,27 +10,25 @@ from threading import RLock
 from loguru import logger
 
 # SOURCE TABLE PARAMETERS
-default_metadata_table_name = 'genomes_metadata_new'
+default_metadata_table_name = 'genomes_metadata'
 default_metadata_schema_name = 'dw'
-default_region_table_name = 'genomes_full_data_red'
+default_region_table_name = 'tcga_dnaseq'
 default_region_schema_name = 'rr'
-default_schema_to_use_name = 'dw'
+default_schema_to_use_name = 'temp'
 db_meta: Optional[MetaData] = None
 # SOURCE TABLES
 initializing_lock = RLock()
 metadata: Optional[Table] = None
-genomes: Optional[Table] = None
+regions: Optional[Table] = None
 public_item: Optional[Table] = None
 
 
-class KGenomes(Source):
+class TCGA(Source):
 
     # MAP ATTRIBUTE NAMES TO TABLE COLUMN NAMES (REQUIRED BY INTERFACE)
     meta_col_map = {
-        Vocabulary.DNA_SOURCE: 'dna_source',
         Vocabulary.GENDER: 'gender',
         Vocabulary.POPULATION: 'population',
-        Vocabulary.SUPER_POPULATION: 'super_population',
         Vocabulary.HEALTH_STATUS: 'health_status',
         Vocabulary.ASSEMBLY: 'assembly',
         Vocabulary.DONOR_ID: 'donor_source_id'
@@ -38,8 +36,6 @@ class KGenomes(Source):
     # REGION CONSTRAINTS THAT CAN BE EXPRESSED WITH THIS SOURCE (REQUIRED BY SOURCE)
     avail_region_constraints = {
         Vocabulary.WITH_VARIANT,
-        Vocabulary.WITH_VARIANT_SAME_C_COPY,
-        Vocabulary.WITH_VARIANT_DIFF_C_COPY,
         Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL
     }
     region_col_map = {
@@ -49,11 +45,8 @@ class KGenomes(Source):
         Vocabulary.STRAND: 'strand',
         Vocabulary.REF: 'ref',
         Vocabulary.ALT: 'alt',
-        Vocabulary.LENGTH: 'length',
         Vocabulary.VAR_TYPE: 'mut_type',
-        Vocabulary.ID: 'id',
-        Vocabulary.QUALITY: 'quality',
-        Vocabulary.FILTER: 'filter'
+        Vocabulary.ID: 'id'
     }
 
     log_sql_commands: bool = True
@@ -82,8 +75,16 @@ class KGenomes(Source):
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
 
+        # TCGA has 4 gender classes: males/females/not reported/<no gender at all>. This trick merges null gender with
+        # not reported. Otherwise, when coordinator does group by cube(gender) we would get 2 times a null gender.
+        columns_of_interest = [self.my_meta_t.c[self.meta_col_map[attr]].label(attr.name) for attr in by_attributes
+                               if attr is not Vocabulary.GENDER]
+        if Vocabulary.GENDER in by_attributes:
+            columns_of_interest.append(
+                func.coalesce(self.my_meta_t.c[self.meta_col_map[Vocabulary.GENDER]], 'not reported')
+                    .label(Vocabulary.GENDER.name))
+
         # compute statistics
-        columns_of_interest = [self.my_meta_t.c[self.meta_col_map[attr]].label(attr.name) for attr in by_attributes]
         if with_download_urls:
             columns_of_interest.append(public_item.c.local_url.label(Vocabulary.DOWNLOAD_URL.name))
         stmt = select(columns_of_interest)
@@ -94,7 +95,7 @@ class KGenomes(Source):
         if with_download_urls:
             stmt = stmt.where(self.my_meta_t.c.item_id == public_item.c.item_id)
         if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, self.logger.debug, 'KGENOMES: STMT DONORS WITH REQUIRED ATTRIBUTES')
+            utils.show_stmt(self.connection, stmt, self.logger.debug, 'TCGA: STMT DONORS WITH REQUIRED ATTRIBUTES')
         return stmt
 
     def variant_occurrence(self, connection: Connection, by_attributes: list, meta_attrs: MetadataAttrs,
@@ -122,129 +123,153 @@ class KGenomes(Source):
             ))
         stmt_sample_set = stmt_sample_set.alias()
 
-        # select individuals with "variant" in table genomes and compute the occurrence for each individual
-        func_occurrence = (genomes.c.al1 + func.coalesce(genomes.c.al2, 0)).label(Vocabulary.OCCURRENCE.name)
+        # select individuals with "variant" in table regions and compute the occurrence for each individual
+        func_occurrence = (regions.c.al1 + func.coalesce(regions.c.al2, 0)).label(Vocabulary.OCCURRENCE.name)
 
         stmt_samples_w_var = self._stmt_where_region_is_any_of_mutations(variant,
-                                                                         from_table=genomes,
-                                                                         select_expression=select([genomes.c.item_id, func_occurrence])) \
+                                                                         from_table=regions,
+                                                                         select_expression=select([regions.c.item_id, func_occurrence])) \
             .alias('samples_w_var')
+
+        # TCGA has 4 gender classes: males/females/not reported/<no gender at all>. This trick merges null gender with
+        # not reported. Otherwise, when coordinator does group by cube(gender) we would get 2 times a null gender.
+        columns_of_interest = [stmt_sample_set.c[self.meta_col_map[attr]].label(attr.name) for attr in by_attributes
+                               if attr is not Vocabulary.GENDER]
+        if Vocabulary.GENDER in by_attributes:
+            columns_of_interest.append(
+                func.coalesce(stmt_sample_set.c[self.meta_col_map[Vocabulary.GENDER]], 'not reported')
+                    .label(Vocabulary.GENDER.name))
 
         # build a query returning individuals in sample_set and for each, the attributes in "by_attributes" + the occurrence
         # of the given variant
         stmt = \
-            select([stmt_sample_set.c[self.meta_col_map[attr]].label(attr.name) for attr in by_attributes]
+            select(columns_of_interest
                    + [func.coalesce(column(Vocabulary.OCCURRENCE.name), 0).label(Vocabulary.OCCURRENCE.name)]) \
             .select_from(stmt_sample_set.outerjoin(stmt_samples_w_var,
                                                    stmt_sample_set.c.item_id == stmt_samples_w_var.c.item_id))
         # TODO test what happens if sample set is empty and it is anyway used in the left join statement
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, self.logger.debug, 'KGENOMES: STMT VARIANT OCCURRENCE')
+            utils.show_stmt(connection, stmt, self.logger.debug, 'TCGA: STMT VARIANT OCCURRENCE')
         return stmt
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
                                    freq_threshold: float, limit_result: int) -> FromClause:
-        # temporary fix for duplicated variants and wrong ones  # TODO delete this
-        if ascending:
-            freq_threshold = max(0.00001, freq_threshold or 0.0)  # avoid frequency 0
-        else:
-            freq_threshold = min(1.0, freq_threshold or 1.0)   # avoid frequency > 1
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
         self.create_table_of_meta(['item_id', 'gender'])
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
-        if self.my_region_t is None:
-            raise ValueError(
-                'Before using this method, you need to assign a valid state to the region attributes at least.'
-                'Please specify some region constraint.')
 
+        # TODO issue warning explaining that only individuals with a defined gender have been considered in the population in sexual chromosomes
         females_and_males_stmt = \
-            select([self.my_meta_t.c.gender, func.count(self.my_meta_t.c.item_id)]) \
+            select([self.my_meta_t.c.gender, func.count()]) \
             .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
             .group_by(self.my_meta_t.c.gender)
         females_and_males = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
         females = next((el[1] for el in females_and_males if el[0] == 'female'), 0)
         males = next((el[1] for el in females_and_males if el[0] == 'male'), 0)
-        population_size = males + females
+        other_genders = reduce(lambda x1, x2: x1+x2, [el[1] for el in females_and_males]) - males - females
+        self.logger.debug(f'TCGA: request /rank_variants_by_frequency for a population of {males+females+other_genders} individuals')
 
-        # reduce size of the join with genomes table
+        # reduce size of the join with regions table
         genomes_red = select(
-            [genomes.c.item_id, genomes.c.chrom, genomes.c.start, genomes.c.ref, genomes.c.alt, genomes.c.al1,
-             genomes.c.al2])\
+            [regions.c.item_id, regions.c.chrom, regions.c.start, regions.c.ref, regions.c.alt, regions.c.al1,
+             regions.c.al2])\
             .alias('variants_few_columns')
 
         # custom functions
         func_occurrence = (func.sum(genomes_red.c.al1) + func.sum(func.coalesce(genomes_red.c.al2, 0))).label(
-            Vocabulary.OCCURRENCE.name)
-        func_positive_donors = func.count(genomes_red.c.item_id).label(Vocabulary.POSITIVE_DONORS.name)
-        if meta_attrs.assembly == 'hg19':
-            func_frequency_new = func.rr.mut_frequency_new_hg19(func_occurrence, males, females, genomes_red.c.chrom,
-                                                                genomes_red.c.start)
-        else:
-            func_frequency_new = func.rr.mut_frequency_new_grch38(func_occurrence, males, females, genomes_red.c.chrom,
-                                                                  genomes_red.c.start)
-        func_frequency_new = func_frequency_new.label(Vocabulary.FREQUENCY.name)
+            'occurrence_by_gender')
+        func_positive_donors = func.count(genomes_red.c.item_id).label('positives_by_gender')
 
         # Actually, self.my_region_t already contains only the individuals compatible with meta_attrs, but it can contain
         # duplicated item_id. Since we want to join, it's better to remove them.
-        sample_set_with_limit = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id])) \
-            .limit(population_size) \
+        sample_set_with_limit = \
+            select([self.my_meta_t.c.item_id, self.my_meta_t.c.gender]) \
+            .where(self.my_meta_t.c.item_id.in_(
+                select([self.my_region_t.c.item_id])
+            )) \
             .alias('sample_set')
-        # LIMIT is part of a trick used to speed up the job. See later
 
-        stmt = select([genomes_red.c.chrom.label(Vocabulary.CHROM.name),
-                       genomes_red.c.start.label(Vocabulary.START.name),
-                       genomes_red.c.ref.label(Vocabulary.REF.name),
-                       genomes_red.c.alt.label(Vocabulary.ALT.name),
-                       cast(literal(population_size), types.Integer).label(Vocabulary.POPULATION_SIZE.name),
+        # compute occurrence and positive donors by gender, excluding weird chromosomes (e.g. chrGL000205)
+        stmt = select([genomes_red.c.chrom,
+                       genomes_red.c.start,
+                       genomes_red.c.ref,
+                       genomes_red.c.alt,
                        func_occurrence,
                        func_positive_donors,
-                       func_frequency_new]) \
+                       sample_set_with_limit.c.gender]) \
             .select_from(genomes_red.join(
                 sample_set_with_limit,
                 genomes_red.c.item_id == sample_set_with_limit.c.item_id)) \
-            .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt)
-        # temporary fix for duplicated variants # TODO delete this
-        stmt = stmt.having(
-            func_occurrence <= females*2 + males
-        )
+            .where(genomes_red.c.chrom < str(26)) \
+            .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt, sample_set_with_limit.c.gender) \
+            .alias('stmt_1')
+
+        # do not count the occurrences and the positiveness of whom who aren't males/females for a variant in chrom 23/24
+        outer_stmt = \
+            select([stmt.c.chrom, stmt.c.start, stmt.c.ref, stmt.c.alt] +
+                   [
+                       case([
+                           ((stmt.c.chrom < str(23)) | (stmt.c.chrom > str(24)), males+other_genders)
+                            ], else_=males).label('males'),
+                       cast(func.sum(column('positives_by_gender')), types.INTEGER).label('positives'),
+                       cast(func.sum(column('occurrence_by_gender')), types.INTEGER).label('occurrence')
+                   ]
+                   ) \
+            .where((stmt.c.gender.in_(['male', 'female'])) | (stmt.c.chrom < str(23)) | (stmt.c.chrom > str(24))) \
+            .group_by(stmt.c.chrom, stmt.c.start, stmt.c.ref, stmt.c.alt) \
+            .alias('stmt_2')
+
+        # other custom function
+        if meta_attrs.assembly == 'hg19':
+            func_frequency_new = func.rr.mut_frequency_new_hg19(column('occurrence'), column('males'), females,
+                                                                cast(outer_stmt.c.chrom, types.INTEGER),
+                                                                outer_stmt.c.start)
+        else:
+            func_frequency_new = func.rr.mut_frequency_new_grch38(column('occurrence'), column('males'), females,
+                                                                  cast(outer_stmt.c.chrom, types.INTEGER),
+                                                                  outer_stmt.c.start)
+        func_frequency_new = func_frequency_new.label(Vocabulary.FREQUENCY.name)
+
+        outer_outer_stmt = \
+            select([
+                outer_stmt.c.chrom.label(Vocabulary.CHROM.name),
+                outer_stmt.c.start.label(Vocabulary.START.name),
+                outer_stmt.c.ref.label(Vocabulary.REF.name),
+                outer_stmt.c.alt.label(Vocabulary.ALT.name),
+                (column('males') + females).label(Vocabulary.POPULATION_SIZE.name),
+                column('positives').label(Vocabulary.POSITIVE_DONORS.name),
+                column('occurrence').label(Vocabulary.OCCURRENCE.name),
+                func_frequency_new
+            ])
         if ascending:
             if freq_threshold:
-                stmt = stmt.having(func_frequency_new >= freq_threshold)
-            stmt = stmt.order_by(asc(func_frequency_new), asc(func_occurrence))
+                outer_outer_stmt = outer_outer_stmt.where(func_frequency_new >= freq_threshold)
+            outer_outer_stmt = outer_outer_stmt.order_by(asc(func_frequency_new), asc(column('occurrence')))
         else:
             if freq_threshold:
-                stmt = stmt.having(func_frequency_new <= freq_threshold)
-            stmt = stmt.order_by(desc(func_frequency_new), desc(func_occurrence))
-        stmt = stmt.limit(limit_result)
-        self.logger.debug(f'KGenomes: request /rank_variants_by_frequency for a population of {population_size} individuals')
+                outer_outer_stmt = outer_outer_stmt.where(func_frequency_new <= freq_threshold)
+            outer_outer_stmt = outer_outer_stmt.order_by(desc(func_frequency_new), desc(column('occurrence')))
+        outer_outer_stmt = outer_outer_stmt.limit(limit_result) \
+            .alias('TCGA_ranked')
 
-        # this + LIMIT in sample_set_with_limit make the trick to force using the index, but only up to 149 individuals
-        if population_size <= 149:  # 333 is the population size at which the execution time w index matches that w/o index
-            connection.execute('SET SESSION enable_seqscan=false')
-
-        # create result table
         if self.log_sql_commands:
-            self.logger.debug('KGenomes: RANKING VARIANTS IN SAMPLE SET')
-        t_name = utils.random_t_name_w_prefix('ranked_variants')
-        utils.create_table_as(t_name, stmt, default_schema_to_use_name, connection, self.log_sql_commands, self.logger.debug)
-        result = Table(t_name, db_meta, autoload=True, autoload_with=connection, schema=default_schema_to_use_name)
-        connection.invalidate()  # instead of setting seqscan=true discard this connection
-        return result
+            utils.show_stmt(connection, outer_outer_stmt, self.logger.debug, 'TCGA: RANKING VARIANTS IN SAMPLE SET')
+        return outer_outer_stmt
 
     def values_of_attribute(self, connection, attribute: Vocabulary):
         # VIA DATABASE
         # self.connection = connection
-        # region_attributes = genomes.columns.keys()
+        # region_attributes = regions.columns.keys()
         # meta_attributes = metadata.columns.keys()
         # self.logger.debug('regions:', region_attributes)
         # self.logger.debug('meta:', meta_attributes)
         # if attribute in meta_attributes:
         #     stmt = select([metadata.c[attribute]]).distinct()
         # elif attribute in region_attributes:
-        #     stmt = select([genomes.c[attribute]]).distinct()
+        #     stmt = select([regions.c[attribute]]).distinct()
         # else:
         #     raise ValueError(
         #         'the given attribute {} is not part of the metadata columns nor region columns'.format(attribute))
@@ -255,59 +280,34 @@ class KGenomes(Source):
         # HARDCODED
         # since an attribute can also be mut_type which is not indexed, answering takes forever. This is an easy solution
         # considered that the underlying data is updated rarely, we don't need an index on mut_type.
+        if attribute == Vocabulary.DNA_SOURCE:
+            raise Notice('Unfortunately it is not known the DNA source of the samples coming from TCGA.')
+        elif attribute == Vocabulary.SUPER_POPULATION:
+            raise Notice('Unfortunately it is not known the super_population of the samples coming from TCGA.')
         distinct_values = {
             self.meta_col_map[Vocabulary.ASSEMBLY]: [
                 'hg19',
                 'grch38'
             ],
-            self.meta_col_map[Vocabulary.DNA_SOURCE]: [
-                'lcl',
-                # '',
-                'blood'
-            ],
             self.meta_col_map[Vocabulary.GENDER]: [
                 'female',
-                'male'
+                'male',
+                'not reported',
+                ''
             ],
             self.meta_col_map[Vocabulary.POPULATION]: [
-                'ITU',
-                'ASW',
-                'ACB',
-                'MXL',
-                'CHB',
-                'GWD',
-                'CLM',
-                'YRI',
-                'PUR',
-                'GIH',
-                'TSI',
-                'BEB',
-                'IBS',
-                'MSL',
-                'PEL',
-                'LWK',
-                'ESN',
-                'PJL',
-                'GBR',
-                'JPT',
-                'STU',
-                'CHS',
-                'KHV',
-                'CEU',
-                'FIN',
-                'CDX'
-            ],
-            self.meta_col_map[Vocabulary.SUPER_POPULATION]: [
-                'EAS',
-                'AFR',
-                'EUR',
-                'AMR',
-                'SAS'
+                '',
+                'american indian or alaska native',
+                'black or african american',
+                'white',
+                'native hawaiian or other pacific islander',
+                'not reported',
+                'asian'
             ],
             self.meta_col_map[Vocabulary.HEALTH_STATUS]: [
-                'true'
+                'false'
             ],
-            'mut_type': ['SNP', 'DEL', 'INS', 'CNV', 'MNP', 'SVA', 'ALU', 'LINE1']
+            'mut_type': ['SNP', 'DEL', 'INS', 'DNP', 'TNP']
         }
         return distinct_values.get(self.meta_col_map.get(attribute))
 
@@ -324,13 +324,13 @@ class KGenomes(Source):
     def init_singleton_tables():
         global initializing_lock
         global metadata
-        global genomes
+        global regions
         global public_item
         global db_meta
-        if metadata is None or genomes is None or public_item is None:
+        if metadata is None or regions is None or public_item is None:
             initializing_lock.acquire(True)
-            if metadata is None or genomes is None or public_item is None:
-                logger.debug('initializing tables for class KGenomes')
+            if metadata is None or regions is None or public_item is None:
+                logger.debug('initializing tables for class TCGA')
                 # reflect already existing tables (u can access columns as <table>.c.<col_name> or <table>.c['<col_name>'])
                 db_meta = MetaData()
                 connection = None
@@ -343,7 +343,7 @@ class KGenomes(Source):
                                      autoload=True,
                                      autoload_with=connection,
                                      schema=default_metadata_schema_name)
-                    genomes = Table(default_region_table_name,
+                    regions = Table(default_region_table_name,
                                     db_meta,
                                     autoload=True,
                                     autoload_with=connection,
@@ -384,7 +384,7 @@ class KGenomes(Source):
         if len(mutations_without_id) > 0:
             second_select = select_expression.where(
                 tuple_(from_table.c.start, from_table.c.ref, from_table.c.alt, from_table.c.chrom).in_(
-                    [(mut.start, mut.ref, mut.alt, mut.chrom) for mut in mutations_without_id]
+                    [(mut.start, mut.ref, mut.alt, str(mut.chrom)) for mut in mutations_without_id]
                 ))
             if only_item_id_in_table is not None:
                 second_select = second_select.where(from_table.c.item_id.in_(select([only_item_id_in_table.c.item_id])))
@@ -398,8 +398,8 @@ class KGenomes(Source):
     # GENERATE DB ENTITIES
     def create_table_of_meta(self, select_columns: Optional[list]):
         """Assigns my_meta_t as the table containing only the individuals with the required metadata characteristics"""
-        if self.meta_attrs.population is not None:
-            self.meta_attrs.super_population = None
+        # if self.meta_attrs.population is not None:
+        #     self.meta_attrs.super_population = None
         columns_in_select = [metadata]  # take all columns by default
         if select_columns is not None:  # otherwise take the ones in select_columns but make sure item_id is present
             temp_set = set(select_columns)
@@ -410,14 +410,12 @@ class KGenomes(Source):
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
         if self.meta_attrs.health_status:
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
-        if self.meta_attrs.dna_source:
-            query = query.where(metadata.c.dna_source.in_(self.meta_attrs.dna_source))
         if self.meta_attrs.assembly:
             query = query.where(metadata.c.assembly == self.meta_attrs.assembly)
         if self.meta_attrs.population:
             query = query.where(metadata.c.population.in_(self.meta_attrs.population))
-        elif self.meta_attrs.super_population:
-            query = query.where(metadata.c.super_population.in_(self.meta_attrs.super_population))
+        # elif self.meta_attrs.super_population:
+        #     query = query.where(metadata.c.super_population.in_(self.meta_attrs.super_population))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
         utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, self.logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)
@@ -432,12 +430,6 @@ class KGenomes(Source):
             to_combine_t = list()
             if self.region_attrs.with_variants:
                 t = self.table_with_all_of_mutations(select_columns)
-                to_combine_t.append(t)
-            if self.region_attrs.with_variants_same_c_copy:
-                t = self.table_with_variants_same_c_copy(select_columns)
-                to_combine_t.append(t)
-            if self.region_attrs.with_variants_diff_c_copy:
-                t = self.table_with_variants_on_diff_c_copies(select_columns)
                 to_combine_t.append(t)
             if self.region_attrs.with_variants_in_reg:
                 t = self.view_of_variants_in_interval_or_type(select_columns)
@@ -490,9 +482,9 @@ class KGenomes(Source):
             return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection, schema=default_schema_to_use_name)
 
     def _table_with_any_of_mutations(self, select_columns, only_item_id_in_table: Optional[Table], *mutations: Mutation):
-        """Returns a Table containing all the rows from the table genomes containing one of the variants in
+        """Returns a Table containing all the rows from the table regions containing one of the variants in
         the argument mutations.
-        :param select_columns selects only the column names in this collection. If None, selects all the columns from genomes.
+        :param select_columns selects only the column names in this collection. If None, selects all the columns from regions.
         :param only_item_id_in_table If None, the variants that are not owned by any of the individuals in this table
         are discarded from the result.
         """
@@ -501,10 +493,10 @@ class KGenomes(Source):
         else:
             # create table for the result
             t_name = utils.random_t_name_w_prefix('with_any_of_mut')
-            columns = [genomes.c[c_name] for c_name in select_columns] if select_columns is not None else [
-                genomes]
+            columns = [regions.c[c_name] for c_name in select_columns] if select_columns is not None else [
+                regions]
             stmt_as = self._stmt_where_region_is_any_of_mutations(*mutations,
-                                                                  from_table=genomes,
+                                                                  from_table=regions,
                                                                   select_expression=select(columns),
                                                                   only_item_id_in_table=only_item_id_in_table)
         stmt_create_table = utils.stmt_create_table_as(t_name, stmt_as, default_schema_to_use_name)
@@ -515,107 +507,17 @@ class KGenomes(Source):
         return Table(t_name, db_meta, autoload=True, autoload_with=self.connection,
                      schema=default_schema_to_use_name)
 
-    def table_with_variants_same_c_copy(self, select_columns: Optional[list]):
-        """
-         Returns a table of variants of the same type of the ones contained in RegionAttrs.with_variants_same_c_copy and only
-         form the individuals that own all of them on the same chromosome copy.
-         :param select_columns: the list of column names to select from the result. If None, all the columns are taken.
-        """
-        if len(self.region_attrs.with_variants_same_c_copy) < 2:
-            raise ValueError('You must provide at least two Mutation instances in order to use this method.')
-        # selects only the mutations to be on the same chromosome copies (this set will be used two times) from all individuals
-        # we will enforce the presence of all the given mutations in all the individuals later...
-        interm_select_column_names = None  # means all columns
-        if select_columns is not None:  # otherwise pick select_columns + minimum required
-            interm_select_column_names = set(select_columns)
-            interm_select_column_names.update(['item_id', 'al1', 'al2'])
-        intermediate_table = self._table_with_any_of_mutations(interm_select_column_names, self.my_meta_t,
-                                                               *self.region_attrs.with_variants_same_c_copy)
-        # groups mutations by owner in the intermediate table, and take only the owners for which sum(al1) or sum(al2)
-        # equals to the number of the given mutations. That condition automatically implies the presence of all the
-        # given mutations in the same individual.
-        # for those owner, take all the given mutations
-        result_columns = [intermediate_table]  # means all columns
-        if select_columns is not None:  # otherwise pick the columns from select_columns
-            result_columns = [intermediate_table.c[col_name] for col_name in select_columns]
-        stmt_as = \
-            select(result_columns) \
-            .where(intermediate_table.c.item_id.in_(
-                select([intermediate_table.c.item_id])
-                .group_by(intermediate_table.c.item_id)
-                .having(
-                    (func.sum(intermediate_table.c.al1) == len(
-                        self.region_attrs.with_variants_same_c_copy)) |  # the ( ) around each condition are mandatory
-                    (func.sum(func.coalesce(intermediate_table.c.al2, 0)) == len(
-                        self.region_attrs.with_variants_same_c_copy)))
-            ))
-        target_t_name = utils.random_t_name_w_prefix('with_var_same_c_copy')
-        stmt = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
-        if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, self.logger.debug,
-                            'INDIVIDUALS (+ THE GIVEN MUTATIONS) HAVING ALL THE SPECIFIED MUTATIONS ON THE SAME CHROMOSOME COPY')
-        self.connection.execute(stmt)
-        if self.log_sql_commands:
-            self.logger.debug('DROP TABLE ' + intermediate_table.name)
-        intermediate_table.drop(self.connection)
-        return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,
-                     schema=default_schema_to_use_name)
-
-    def table_with_variants_on_diff_c_copies(self, select_columns: Optional[list]):
-        """
-         Returns a table of variants of the same type of the ones contained in RegionAttrs.with_variants_diff_c_copy and only
-         form the individuals that own both of them on opposite chromosome copies.
-         :param select_columns: the list of column names to select from the result. If None, all the columns are taken.
-        """
-        if len(self.region_attrs.with_variants_diff_c_copy) != 2:
-            raise ValueError('You must provide exactly two Mutation instances in order to use this method.')
-        # selects only the mutations to be on the different chromosome copies (this set will be used two times) from all individuals
-        # we will enforce the presence of the mutations in all the individuals later...
-        interm_select_column_names = None  # means all columns
-        if select_columns is not None:  # otherwise pick select_columns + minimum required
-            interm_select_column_names = set(select_columns)
-            interm_select_column_names.update(['item_id', 'al1', 'al2'])
-        intermediate_table = self._table_with_any_of_mutations(interm_select_column_names, self.my_meta_t,
-                                                               *self.region_attrs.with_variants_diff_c_copy)
-        # groups mutations by owner in the intermediate table, and take only the owners for which sum(al1) = 1 and sum(al2) = 1
-        # that condition automatically implies the presence of both mutations for the same owner
-        # for those owner, take both mutations
-        result_columns = [intermediate_table]  # means all columns
-        if select_columns is not None:  # otherwise pick the columns from select_columns
-            result_columns = [intermediate_table.c[col_name] for col_name in select_columns]
-        stmt_as = \
-            select(result_columns) \
-            .where(intermediate_table.c.item_id.in_(
-                select([intermediate_table.c.item_id])
-                .group_by(intermediate_table.c.item_id)
-                .having(
-                    (func.count(intermediate_table.c.item_id) == 2) &
-                    (func.sum(intermediate_table.c.al1) == 1) &  # the ( ) around each condition are mandatory
-                    (func.sum(func.coalesce(intermediate_table.c.al2, 0)) == 1)
-                )))
-        target_t_name = utils.random_t_name_w_prefix('with_var_diff_c_copies')
-        stmt = utils.stmt_create_table_as(target_t_name, stmt_as, default_schema_to_use_name)
-        if self.log_sql_commands:
-            utils.show_stmt(self.connection, stmt, self.logger.debug,
-                            'INDIVIDUALS (+ THE GIVEN MUTATIONS) HAVING BOTH MUTATIONS ON OPPOSITE CHROMOSOME COPIES')
-        self.connection.execute(stmt)
-        if self.log_sql_commands:
-            self.logger.debug('DROP TABLE ' + intermediate_table.name)
-        intermediate_table.drop(self.connection)
-        return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,
-                     schema=default_schema_to_use_name)
-
     def view_of_variants_in_interval_or_type(self, select_columns: Optional[list]):
         if self.region_attrs.with_variants_in_reg is None and self.region_attrs.with_variants_of_type is None:
             raise ValueError('you called this method without giving any selection criteria')
-        columns = [genomes.c[c_name] for c_name in select_columns] if select_columns is not None else [genomes]
+        columns = [regions.c[c_name] for c_name in select_columns] if select_columns is not None else [regions]
         stmt_as = select(columns)
         if self.region_attrs.with_variants_in_reg is not None:
-            stmt_as = stmt_as.where((genomes.c.chrom == self.region_attrs.with_variants_in_reg.chrom) &
-                                    (genomes.c.start >= self.region_attrs.with_variants_in_reg.start) &
-                                    (genomes.c.start <= self.region_attrs.with_variants_in_reg.stop))
+            stmt_as = stmt_as.where((regions.c.chrom == str(self.region_attrs.with_variants_in_reg.chrom)) &
+                                    (regions.c.start >= self.region_attrs.with_variants_in_reg.start) &
+                                    (regions.c.start <= self.region_attrs.with_variants_in_reg.stop))
         if self.region_attrs.with_variants_of_type is not None:
-            stmt_as = stmt_as.where(genomes.c.mut_type.in_(self.region_attrs.with_variants_of_type))
+            stmt_as = stmt_as.where(regions.c.mut_type.in_(self.region_attrs.with_variants_of_type))
         generated_view_name = utils.random_t_name_w_prefix('mut_of_type_interval')
         stmt = utils.stmt_create_view_as(generated_view_name, stmt_as, default_schema_to_use_name)
         if self.log_sql_commands:
@@ -628,18 +530,18 @@ class KGenomes(Source):
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
                            output_region_attrs: List[Vocabulary], assembly) -> Selectable:
-        select_columns = [genomes.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]
+        select_columns = [regions.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]
         stmt =\
             select(select_columns).distinct() \
-            .where((genomes.c.start >= genomic_interval.start) &
-                   (genomes.c.start <= genomic_interval.stop) &
-                   (genomes.c.chrom == genomic_interval.chrom)) \
-            .where(genomes.c.item_id.in_(
+            .where((regions.c.start >= genomic_interval.start) &
+                   (regions.c.start <= genomic_interval.stop) &
+                   (regions.c.chrom == str(genomic_interval.chrom))) \
+            .where(regions.c.item_id.in_(
                 select([metadata.c.item_id])
                 .where(metadata.c.assembly == assembly)
             ))
         if self.log_sql_commands:
-            utils.show_stmt(connection, stmt, self.logger.debug, f'KGenomes: VARIANTS IN REGION '
+            utils.show_stmt(connection, stmt, self.logger.debug, f'TCGA: VARIANTS IN REGION '
                                                                  f'{genomic_interval.chrom}'
                                                                  f'-{genomic_interval.start}-{genomic_interval.stop}')
         return stmt
@@ -682,38 +584,30 @@ class KGenomes(Source):
             return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection,
                          schema=default_schema_to_use_name)
 
-    def get_chrom_of_variant(self, connection: Connection, variant: Mutation):
-        if variant.chrom is not None:
-            return variant.chrom
-        else:
-            global genomes
-            chrom_query = select([genomes.c.chrom]).where(genomes.c.id == variant.id).limit(1)
-            return connection.execute(chrom_query).fetchone().values()[0]
-
     def get_variant_details(self, connection: Connection, variant: Mutation, which_details: List[Vocabulary],
                             assembly) -> list:
         self.connection = connection
-        global genomes
+        global regions
         select_columns = []
         for att in which_details:
             mapping = self.region_col_map.get(att)
             if mapping is not None:
-                select_columns.append(genomes.c[mapping].label(att.name))
+                select_columns.append(regions.c[mapping].label(att.name))
             else:
                 select_columns.append(cast(literal(Vocabulary.unknown.name), types.String).label(att.name))
 
         stmt = select(select_columns).distinct()
         if variant.chrom is not None:
-            stmt = stmt.where((genomes.c.chrom == variant.chrom) &
-                              (genomes.c.start == variant.start) &
-                              (genomes.c.ref == variant.ref) &
-                              (genomes.c.alt == variant.alt))
+            stmt = stmt.where((regions.c.chrom == str(variant.chrom)) &
+                              (regions.c.start == variant.start) &
+                              (regions.c.ref == variant.ref) &
+                              (regions.c.alt == variant.alt))
         else:
-            stmt = stmt.where(genomes.c.id == variant.id)
-        stmt = stmt.where(genomes.c.item_id.in_(
-                select([metadata.c.item_id])
-                .where(metadata.c.assembly == assembly)
-        ))
+            stmt = stmt.where(regions.c.id == variant.id)
+        stmt = stmt.where(regions.c.item_id.in_(
+                        select([metadata.c.item_id])
+                        .where(metadata.c.assembly == assembly)
+                    ))
         if self.log_sql_commands:
             utils.show_stmt(connection, stmt, self.logger.debug, 'GET VARIANT DETAILS')
         result = connection.execute(stmt)

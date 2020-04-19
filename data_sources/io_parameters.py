@@ -144,7 +144,7 @@ class MetadataAttrs:
             self.free_dimensions.append(Vocabulary.DNA_SOURCE)
 
         if assembly:
-            self.assembly = assembly
+            self.assembly = assembly.lower()
             self.constrained_dimensions.append(Vocabulary.ASSEMBLY)
         else:
             self.assembly = None

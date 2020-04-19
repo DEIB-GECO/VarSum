@@ -253,6 +253,50 @@ def gencode_find_gene_without_coordinator():
     database.try_py_function(do)
 
 
+#TEST without coordinator
+def tcga_values():
+    import database.database as database
+    from data_sources.tcga.tcga import TCGA
+
+    def do(connection):
+        source = TCGA(logger)
+        print(source.values_of_attribute(connection, Vocabulary.GENDER))
+    res = database.try_py_function(do)
+
+def tcga_variant_details():
+    import database.database as database
+    from data_sources.tcga.tcga import TCGA
+
+    def do(connection):
+        source = TCGA(logger)
+        print(source.get_variant_details(connection, Mutation(_id='rs763259102'), [Vocabulary.CHROM, Vocabulary.START, Vocabulary.STOP, Vocabulary.ID], 'grch38'))
+    res = database.try_py_function(do)
+
+def tcga_variants_in_region():
+    import database.database as database
+    from data_sources.tcga.tcga import TCGA
+
+    def do(connection):
+        source = TCGA(logger)
+        stmt = source.variants_in_region(connection, GenomicInterval(10, 5524996, 5524999), [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT], 'grch38')
+        return connection.execute(stmt)
+    res = database.try_py_function(do)
+    db_utils.print_query_result(res)
+
+def tcga_donors():
+    import database.database as database
+    from data_sources.tcga.tcga import TCGA
+
+    def do(connection):
+        source = TCGA(logger)
+        stmt = source.variants_in_region(connection, GenomicInterval(10, 5524996, 5524999), [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT], 'grch38')
+        return connection.execute(stmt)
+    res = database.try_py_function(do)
+    db_utils.print_query_result(res)
+
+
+tcga_variants_in_region()
+
 with_annotations = [
         Vocabulary.CHROM,
         Vocabulary.START,
@@ -261,17 +305,19 @@ with_annotations = [
         Vocabulary.GENE_NAME,
         Vocabulary.GENE_TYPE
     ]
-# print_output_table(Coordinator(logger).annotate_interval(GenomicInterval(1, 29500, 50000), with_annotations, 'hg19'))
-print_output_table(Coordinator(logger).annotate_variant(GenomicInterval(1, 29500, 50000), with_annotations, 'hg19'))
+# result = Coordinator(logger).annotate_interval(GenomicInterval(1, 29500, 50000), with_annotations, 'hg19')
 
-# result_proxy = coordinator.donor_distribution(by_attributes, hg19_healthy_female_BEB, None)
-# result_proxy = coordinator.donor_distribution([Vocabulary.SUPER_POPULATION], MetadataAttrs(assembly='hg19', super_population=['AFR', 'SAS']), None)
+# result = Coordinator(logger).donor_distribution(by_attributes, hg19_healthy_female_BEB, None)
+# result = Coordinator(logger).donor_distribution([Vocabulary.SUPER_POPULATION], MetadataAttrs(assembly='hg19', super_population=['AFR', 'SAS']), None)
 
-# result_proxy = coordinator.variant_distribution(by_attributes, hg19_healthy_female_BEB, RegionAttrs([mut1], None, None), mut2)
-# result_proxy = coordinator.variant_distribution(by_attributes, hg19_healthy_female_BEB, None, mut1)
-# db_utils.print_query_result(result_proxy)
-# result_proxy = coordinator.most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
-# db_utils.print_query_result(result_proxy)
-# print(coordinator.values_of_attribute(Vocabulary.HEALTH_STATUS))
+# result = Coordinator(logger).variant_distribution(by_attributes, hg19_healthy_female_BEB, RegionAttrs([mut1], None, None), mut2)
+# result = Coordinator(logger).variant_distribution(by_attributes, hg19_healthy_female_BEB, None, mut1)
+
+# result = Coordinator(logger).most_common_variants(hg19_healthy_female_BEB, RegionAttrs([mut1], None, None))
+
+# print_output_table(result)
+
+
+# print(Coordinator(logger).values_of_attribute(Vocabulary.HEALTH_STATUS))
 
 

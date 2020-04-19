@@ -1,6 +1,7 @@
 from data_sources.annot_interface import AnnotInterface
 from data_sources.source_interface import *
 from data_sources.kgenomes.kgenomes import KGenomes
+from data_sources.tcga.tcga import TCGA
 from data_sources.gencode_v19_hg19.gencode_v19_hg19 import GencodeV19HG19
 from typing import List, Type
 from sqlalchemy.engine import ResultProxy
@@ -12,7 +13,7 @@ import itertools
 
 
 _sources: List[Type[Source]] = [
-    KGenomes
+    TCGA
 ]
 _annotation_sources: List[Type[AnnotInterface]] = [
     GencodeV19HG19
@@ -29,6 +30,7 @@ class Coordinator:
                            with_download_url: bool) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
+        answer_204_if_no_source_can_answer(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
         by_attributes_copy = by_attributes.copy()
@@ -103,6 +105,7 @@ class Coordinator:
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
+        answer_204_if_no_source_can_answer(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
         by_attributes_copy = set(by_attributes)
@@ -151,29 +154,32 @@ class Coordinator:
             raise NoDataFromSources(notices)
         else:
             all_sources = union(*from_sources).alias('all_sources')
+            chrom = int(region_of_variant[0])
+            start = region_of_variant[1]
 
             # functions
             func_count_donors = func.count(column(Vocabulary.DONOR_ID.name)).label('POPULATION_SIZE')
+            # in the following statements 1 is an abbreviation for the column DONOR_ID
             func_count_positive_donors = func.count(1).filter(column(Vocabulary.OCCURRENCE.name) > 0).label('POSITIVE_DONORS')
-            func_count_males = cast(func.count(1).filter(column(Vocabulary.GENDER.name) == 'male'), types.Integer).label('MALES')
-            func_count_females = cast(func.count(1).filter(column(Vocabulary.GENDER.name) == 'female'), types.Integer).label('FEMALES')
+            func_count_males_and_na = cast(func.count(1).filter(func.coalesce(column(Vocabulary.GENDER.name), '') != 'female'), types.Integer)
+            func_count_females = cast(func.count(1).filter(column(Vocabulary.GENDER.name) == 'female'), types.Integer)
             func_count_occurrence = func.sum(column(Vocabulary.OCCURRENCE.name)).label('OCCURRENCE_OF_TARGET_VARIANT')
             if meta_attrs.assembly == 'hg19':
-                func_frequency_new = func.rr.mut_frequency_new_hg19(func_count_occurrence, func_count_males, func_count_females,
-                                                                    region_of_variant[0],
-                                                                    region_of_variant[1])
+                func_frequency_new = func.rr.mut_frequency_new_hg19(func_count_occurrence, func_count_males_and_na,
+                                                                    func_count_females, chrom, start)
             else:
-                func_frequency_new = func.rr.mut_frequency_new_grch38(func_count_occurrence, func_count_males, func_count_females,
-                                                                      region_of_variant[0],
-                                                                      region_of_variant[1])
+                func_frequency_new = func.rr.mut_frequency_new_grch38(func_count_occurrence, func_count_males_and_na,
+                                                                      func_count_females, chrom, start)
             func_frequency_new = func_frequency_new.label(Vocabulary.FREQUENCY.name)
     
             # merge results by union (which removes duplicates) and count
             by_attributes_as_columns = [column(att.name) for att in by_attributes]
             stmt = \
                 select(by_attributes_as_columns + [func_count_donors, func_count_positive_donors, func_count_occurrence, func_frequency_new]) \
-                .select_from(all_sources) \
-                .group_by(func.cube(*by_attributes_as_columns))
+                .select_from(all_sources)
+            if chrom == 23 or chrom == 24:
+                stmt = stmt.where(column(Vocabulary.GENDER.name).in_(['male', 'female']))
+            stmt = stmt.group_by(func.cube(*by_attributes_as_columns))
     
             return self.get_as_dictionary(stmt, 'VARIANT DISTRIBUTION', notices)
 
@@ -183,6 +189,7 @@ class Coordinator:
         limit_result = limit_result or 10
         eligible_sources = [source for source in _sources if
                             source.can_express_constraint(meta_attrs, region_attrs, source.rank_variants_by_frequency)]
+        answer_204_if_no_source_can_answer(eligible_sources)
         notices = list()
     
         def ask_to_source(source: Type[Source]):
@@ -238,7 +245,8 @@ class Coordinator:
     def values_of_attribute(self, attribute: Vocabulary) -> dict:
         eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
         eligible_sources.extend([annot_source for annot_source in _annotation_sources if attribute in annot_source.get_available_annotation_types()])
-    
+        answer_204_if_no_source_can_answer(eligible_sources)
+
         notices = list()
     
         def ask_to_source(source):
@@ -275,6 +283,7 @@ class Coordinator:
         which_annotations = set(annot_types)
         eligible_sources = [_source for _source in _annotation_sources
                             if not which_annotations.isdisjoint(_source.get_available_annotation_types())]
+        answer_204_if_no_source_can_answer(eligible_sources)
     
         notices = list()
     
@@ -404,6 +413,7 @@ class Coordinator:
         select_from_sources_as_set = set(select_from_sources)
         eligible_sources = [_source for _source in _annotation_sources
                             if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
+        answer_204_if_no_source_can_answer(eligible_sources)
 
         notices = list()
 
@@ -496,6 +506,12 @@ class Coordinator:
         if add_notices:
             result['notice'] = [notice.args[0] for notice in add_notices]
         return result
+
+
+def answer_204_if_no_source_can_answer(eligible_sources):
+    if len(eligible_sources) == 0:
+        raise AskUserIntervention(
+            "No data source can satisfy the given request parameters. If possible, try relaxing some constraints.", 422)
 
 
 class AskUserIntervention(Exception):
