@@ -275,11 +275,19 @@ class Coordinator:
                 result['notice'] = [notice.args for notice in notices]
             return result
 
-    def annotate_variant(self, variant: Mutation, annot_types: List[Vocabulary], assembly: str) -> dict:
+    def annotate_variant(self, variant: Mutation, assembly: str) -> dict:
         region_of_variant = self.get_region_of_variant(variant, assembly)
-        return self.annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), annot_types, assembly)
+        return self.annotate_interval(GenomicInterval(*region_of_variant[0:3], strand=None), assembly)
 
-    def annotate_interval(self, interval: GenomicInterval, annot_types: List[Vocabulary], assembly: str) -> dict:
+    def annotate_interval(self, interval: GenomicInterval, assembly: str) -> dict:
+        annot_types = [
+            Vocabulary.CHROM,
+            Vocabulary.START,
+            Vocabulary.STOP,
+            Vocabulary.STRAND,
+            Vocabulary.GENE_NAME,
+            Vocabulary.GENE_TYPE
+        ]
         which_annotations = set(annot_types)
         eligible_sources = [_source for _source in _annotation_sources
                             if not which_annotations.isdisjoint(_source.get_available_annotation_types())]

@@ -292,8 +292,7 @@ class TCGA(Source):
             self.meta_col_map[Vocabulary.GENDER]: [
                 'female',
                 'male',
-                'not reported',
-                ''
+                'not reported'
             ],
             self.meta_col_map[Vocabulary.POPULATION]: [
                 '',

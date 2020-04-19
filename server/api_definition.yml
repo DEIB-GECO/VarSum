@@ -400,21 +400,32 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: '#/components/schemas/Variant'
-                - $ref: '#/components/schemas/GenomicInterval'
+              allOf:
+                - oneOf:
+                  - $ref: '#/components/schemas/Variant'
+                  - $ref: '#/components/schemas/GenomicInterval'
+                - type: object
+                  properties:
+                    assembly:
+                      type: string
+                      enum: ['hg19', 'grch38']
+                  required:
+                    - assembly
             examples:
               Annotate variant having coordinates:
                 value:
+                  assembly: hg19
                   chrom: 1
                   start: 13271
                   ref: "G"
                   alt: "C"
               Annotate variant having id:
                 value:
+                  assembly: hg19
                   id: rs568927205
               Annotate genomic interval:
                 value:
+                  assembly: hg19
                   chrom: 1
                   start: 29500
                   stop: 50000
@@ -460,16 +471,26 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: '#/components/schemas/Gene'
-                - $ref: '#/components/schemas/GenomicInterval'
+              allOf:
+                - oneOf:
+                  - $ref: '#/components/schemas/Gene'
+                  - $ref: '#/components/schemas/GenomicInterval'
+                - type: object
+                  properties:
+                    assembly:
+                      type: string
+                      enum: ['hg19', 'grch38']
+                  required:
+                    - assembly
             examples:
               Variants overlapping with gene:
                 value:
+                  assembly: hg19
                   name: DDX11L1
                   type: pseudogene
               Variants located in genomic region:
                 value:
+                  assembly: hg19
                   chrom: 1
                   start: 29500
                   stop: 50000

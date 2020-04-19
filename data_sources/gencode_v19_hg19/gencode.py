@@ -126,7 +126,7 @@ class Gencode(AnnotInterface):
             initializing_lock.acquire(True)
             # if I'm second, the table has been already initialized, so release the lock and exit. If I'm first proceed
             if ann_table is None or item_id_assembly_grch38 is None or item_id_assembly_hg19 is None:
-                logger.debug('initializing table for class gencode_v19_hg19')
+                logger.debug('initializing table for class Gencode')
                 db_meta = MetaData()
                 connection = None
                 try:
