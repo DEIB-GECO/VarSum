@@ -8,6 +8,7 @@ import database.db_utils as utils
 import database.database as database
 from threading import RLock
 from loguru import logger
+import warnings
 
 # SOURCE TABLE PARAMETERS
 default_metadata_table_name = 'genomes_metadata'
@@ -161,7 +162,8 @@ class TCGA(Source):
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
 
-        # TODO issue warning explaining that only individuals with a defined gender have been considered in the population in sexual chromosomes
+        warnings.warn('Note for TCGA data: Individuals with an undefined gender have been excluded from the population '
+                      'while calculating the frequency of variants in chromosomes 23 and 24', SourceWarning)
         females_and_males_stmt = \
             select([self.my_meta_t.c.gender, func.count()]) \
             .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \

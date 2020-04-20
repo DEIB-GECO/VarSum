@@ -10,6 +10,7 @@ import sqlalchemy.exc
 import database.database as database
 import concurrent.futures
 import itertools
+import warnings
 
 
 _sources: List[Type[Source]] = [
@@ -178,6 +179,9 @@ class Coordinator:
                 select(by_attributes_as_columns + [func_count_donors, func_count_positive_donors, func_count_occurrence, func_frequency_new]) \
                 .select_from(all_sources)
             if chrom == 23 or chrom == 24:
+                notices.append(Notice('The target variant is located in a non-autosomal chromosome, as such the '
+                                      'individuals of the selected population having unknown gender have been excluded '
+                                      'from the frequency computation.'))
                 stmt = stmt.where(column(Vocabulary.GENDER.name).in_(['male', 'female']))
             stmt = stmt.group_by(func.cube(*by_attributes_as_columns))
     
@@ -475,7 +479,13 @@ class Coordinator:
     def try_catch_source_errors(self, fun, alternative_return_value, container_of_notices: List[Notice]):
         # noinspection PyBroadException
         try:
-            return fun()
+            # call fun but catch warnings
+            with warnings.catch_warnings(record=True) as all_warnings:
+                fun_result = fun()
+                for w in all_warnings:
+                    if issubclass(w.category, SourceWarning):
+                        container_of_notices.append(Notice(str(w.message)))
+                return fun_result
         except sqlalchemy.exc.OperationalError as e:  # database connection not available / user canceled query
             # This exception is not recoverable here, but it subclass the ones below, so I must catch it here and
             # re-raise if I want to let it be handled outside.

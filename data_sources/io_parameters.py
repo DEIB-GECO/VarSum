@@ -220,9 +220,19 @@ class Notice(Exception):
     notice indicating why a given source couldn't provide an answer. This object and subclasses are reserved for
     "normal" or expected conditions which make the source not able to provide an answer. This do not replace
     other Exceptions though! If you encounter in a real error, then you should raise an Exception.
-    Notice is the only expected way for a source to communicate to the coordinator providing anything that isn't the
+    Notice is the only expected way for a source to communicate to the coordinator returning something that isn't the
     answer.
     An example use case for Notice is the impossibility to return the answer due to privacy constraints.
     """
     def __init__(self, msg_explaining_cause_of_error: str):
         self.msg = msg_explaining_cause_of_error
+
+
+class SourceWarning(UserWarning):
+    """
+    This class can be used by any source willing to communicate a problem affecting the result directly to the user. If
+    a source uses this warning, the source is expected to provide still a valid result, but the warning message will be
+    attached to the final response together with the normal body of the response.
+    """
+    def __init__(self, *args):
+        super().__init__(*args)
