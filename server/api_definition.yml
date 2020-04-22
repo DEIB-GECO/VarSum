@@ -3,12 +3,12 @@ info:
   title: Data summarization 1KG
   description: >-
     This API returns summary statistics on user-defined populations and their
-    variants, as the ones identified during the 1000 Genomes Project. For more
+    variants, as the ones identified during the 1000 Genomes Project and The Cancer Genomes Atlas Program. For more
     information visit the repository 
     [tomalf2/data_summarization_1KGP on GitHub](https://github.com/tomalf2/data_summarization_1KGP#data_summarization_1kgp).
 
       ## Additional Resources
-      - [List of abbreviations commonly used in 1000 Genomes Project.](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
+      - [List of the abbreviations used in the data sources](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
       - [Python Notebooks demo](https://github.com/tomalf2/data_summarization_1KGP/tree/master/demo)
       ## How to
       - [(video) Exploring the documentation ](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ESEAJhaYj-FHh3AfcVYkp0wBDcI7djdLQm_twsIdjSpdTw?e=qMKfkY)
