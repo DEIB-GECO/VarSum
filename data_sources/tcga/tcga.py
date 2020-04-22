@@ -1,6 +1,6 @@
 from ..source_interface import *
 from ..io_parameters import *
-from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types, case
+from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, text, literal, column, types, case
 from sqlalchemy.sql.expression import Selectable
 from sqlalchemy.engine import Connection
 from functools import reduce
@@ -11,7 +11,7 @@ from loguru import logger
 import warnings
 
 # SOURCE TABLE PARAMETERS
-default_metadata_table_name = 'genomes_metadata'
+default_metadata_table_name = 'genomes_metadata_2'
 default_metadata_schema_name = 'dw'
 default_region_table_name = 'tcga_dnaseq'
 default_region_schema_name = 'rr'
@@ -29,7 +29,7 @@ class TCGA(Source):
     # MAP ATTRIBUTE NAMES TO TABLE COLUMN NAMES (REQUIRED BY INTERFACE)
     meta_col_map = {
         Vocabulary.GENDER: 'gender',
-        Vocabulary.POPULATION: 'population',
+        Vocabulary.ETHNICITY: 'ethnicity',
         Vocabulary.HEALTH_STATUS: 'health_status',
         Vocabulary.ASSEMBLY: 'assembly',
         Vocabulary.DONOR_ID: 'donor_source_id'
@@ -162,17 +162,20 @@ class TCGA(Source):
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
 
-        warnings.warn('Note for TCGA data: Individuals with an undefined gender have been excluded from the population '
-                      'while calculating the frequency of variants in chromosomes 23 and 24', SourceWarning)
         females_and_males_stmt = \
             select([self.my_meta_t.c.gender, func.count()]) \
             .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
             .group_by(self.my_meta_t.c.gender)
-        females_and_males = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
-        females = next((el[1] for el in females_and_males if el[0] == 'female'), 0)
-        males = next((el[1] for el in females_and_males if el[0] == 'male'), 0)
-        other_genders = reduce(lambda x1, x2: x1+x2, [el[1] for el in females_and_males]) - males - females
+        gender_of_individuals = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
+        if len(gender_of_individuals) == 0:
+            raise EmptyResult('TCGA has no individuals matching the request parameters.')
+        females = next((el[1] for el in gender_of_individuals if el[0] == 'female'), 0)
+        males = next((el[1] for el in gender_of_individuals if el[0] == 'male'), 0)
+        other_genders = reduce(lambda x1, x2: x1+x2, [el[1] for el in gender_of_individuals]) - males - females
         self.logger.debug(f'TCGA: request /rank_variants_by_frequency for a population of {males+females+other_genders} individuals')
+
+        warnings.warn('Note for TCGA data: Individuals with an undefined gender have been excluded from the population '
+                      'while calculating the frequency of variants in chromosomes 23 and 24', SourceWarning)
 
         # reduce size of the join with regions table
         genomes_red = select(
@@ -286,6 +289,8 @@ class TCGA(Source):
             raise Notice('Unfortunately it is not known the DNA source of the samples coming from TCGA.')
         elif attribute == Vocabulary.SUPER_POPULATION:
             raise Notice('Unfortunately it is not known the super_population of the samples coming from TCGA.')
+        elif attribute == Vocabulary.POPULATION:
+            raise Notice('Unfortunately it is not known the population of the samples coming from TCGA.')
         distinct_values = {
             self.meta_col_map[Vocabulary.ASSEMBLY]: [
                 'hg19',
@@ -296,8 +301,7 @@ class TCGA(Source):
                 'male',
                 'not reported'
             ],
-            self.meta_col_map[Vocabulary.POPULATION]: [
-                '',
+            self.meta_col_map[Vocabulary.ETHNICITY]: [
                 'american indian or alaska native',
                 'black or african american',
                 'white',
@@ -399,24 +403,25 @@ class TCGA(Source):
     # GENERATE DB ENTITIES
     def create_table_of_meta(self, select_columns: Optional[list]):
         """Assigns my_meta_t as the table containing only the individuals with the required metadata characteristics"""
-        # if self.meta_attrs.population is not None:
-        #     self.meta_attrs.super_population = None
         columns_in_select = [metadata]  # take all columns by default
         if select_columns is not None:  # otherwise take the ones in select_columns but make sure item_id is present
             temp_set = set(select_columns)
             temp_set.add('item_id')
             columns_in_select = [metadata.c[col_name] for col_name in temp_set]
-        query = select(columns_in_select)
+        query = select(columns_in_select).where(metadata.c.item_id.in_(
+            text("select item_id from public.item where dataset_id in ( "
+                 "select dataset_id from public.dataset "
+                 "where dataset_name ilike '%TCGA_dnaseq%' "
+                 "or dataset_name ilike '%TCGA_somatic_mutation_masked%' "
+                 ")")))
         if self.meta_attrs.gender:
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
         if self.meta_attrs.health_status:
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
         if self.meta_attrs.assembly:
             query = query.where(metadata.c.assembly == self.meta_attrs.assembly)
-        if self.meta_attrs.population:
-            query = query.where(metadata.c.population.in_(self.meta_attrs.population))
-        # elif self.meta_attrs.super_population:
-        #     query = query.where(metadata.c.super_population.in_(self.meta_attrs.super_population))
+        if self.meta_attrs.ethnicity:
+            query = query.where(metadata.c.ethnicity.in_(self.meta_attrs.ethnicity))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
         utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, self.logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)
@@ -531,7 +536,13 @@ class TCGA(Source):
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
                            output_region_attrs: List[Vocabulary], assembly) -> Selectable:
-        select_columns = [regions.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]
+        select_columns = list()
+        for att in output_region_attrs:
+            if att == Vocabulary.CHROM:
+                select_columns.append(cast(regions.c.chrom, types.SmallInteger).label(att.name))
+            else:
+                select_columns.append(regions.c[self.region_col_map[att]].label(att.name))
+
         stmt =\
             select(select_columns).distinct() \
             .where((regions.c.start >= genomic_interval.start) &

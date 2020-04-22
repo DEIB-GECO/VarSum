@@ -32,7 +32,7 @@ paths:
           style: simple
           schema:
             type: string
-            enum: [assembly, gender, population, super_population, dna_source, health_status, gene_type]
+            enum: [assembly, gender, population, super_population, dna_source, health_status, gene_type, ethnicity]
       responses:
         '200':
           description: >-
@@ -585,6 +585,12 @@ components:
           uniqueItems: true
           items:
             type: string
+        ethnicity:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
         health_status:
           type: string
       required:
@@ -622,7 +628,7 @@ components:
       type: array
       items:
         type: string
-        enum: [gender, population, super_population, dna_source, health_status]
+        enum: [gender, population, super_population, dna_source, health_status, ethnicity]
 
     GenomicInterval:
       type: object

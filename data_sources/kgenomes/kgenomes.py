@@ -1,6 +1,6 @@
 from ..source_interface import *
 from ..io_parameters import *
-from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types
+from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types, text
 from sqlalchemy.sql.expression import Selectable
 from sqlalchemy.engine import Connection
 from functools import reduce
@@ -10,11 +10,11 @@ from threading import RLock
 from loguru import logger
 
 # SOURCE TABLE PARAMETERS
-default_metadata_table_name = 'genomes_metadata_new'
+default_metadata_table_name = 'genomes_metadata_2'
 default_metadata_schema_name = 'dw'
-default_region_table_name = 'genomes_full_data_red'
+default_region_table_name = 'kgenomes_red'
 default_region_schema_name = 'rr'
-default_schema_to_use_name = 'dw'
+default_schema_to_use_name = 'temp'
 db_meta: Optional[MetaData] = None
 # SOURCE TABLES
 initializing_lock = RLock()
@@ -33,6 +33,7 @@ class KGenomes(Source):
         Vocabulary.SUPER_POPULATION: 'super_population',
         Vocabulary.HEALTH_STATUS: 'health_status',
         Vocabulary.ASSEMBLY: 'assembly',
+        Vocabulary.ETHNICITY: 'ethnicity',
         Vocabulary.DONOR_ID: 'donor_source_id'
     }
     # REGION CONSTRAINTS THAT CAN BE EXPRESSED WITH THIS SOURCE (REQUIRED BY SOURCE)
@@ -144,29 +145,22 @@ class KGenomes(Source):
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
                                    freq_threshold: float, limit_result: int) -> FromClause:
-        # temporary fix for duplicated variants and wrong ones  # TODO delete this
-        if ascending:
-            freq_threshold = max(0.00001, freq_threshold or 0.0)  # avoid frequency 0
-        else:
-            freq_threshold = min(1.0, freq_threshold or 1.0)   # avoid frequency > 1
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
         self.create_table_of_meta(['item_id', 'gender'])
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
-        if self.my_region_t is None:
-            raise ValueError(
-                'Before using this method, you need to assign a valid state to the region attributes at least.'
-                'Please specify some region constraint.')
 
         females_and_males_stmt = \
             select([self.my_meta_t.c.gender, func.count(self.my_meta_t.c.item_id)]) \
             .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
             .group_by(self.my_meta_t.c.gender)
-        females_and_males = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
-        females = next((el[1] for el in females_and_males if el[0] == 'female'), 0)
-        males = next((el[1] for el in females_and_males if el[0] == 'male'), 0)
+        gender_of_individuals = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
+        if len(gender_of_individuals) == 0:
+            raise EmptyResult('KGenomes has no individuals matching the request parameters.')
+        females = next((el[1] for el in gender_of_individuals if el[0] == 'female'), 0)
+        males = next((el[1] for el in gender_of_individuals if el[0] == 'male'), 0)
         population_size = males + females
 
         # reduce size of the join with genomes table
@@ -206,10 +200,6 @@ class KGenomes(Source):
                 sample_set_with_limit,
                 genomes_red.c.item_id == sample_set_with_limit.c.item_id)) \
             .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt)
-        # temporary fix for duplicated variants # TODO delete this
-        stmt = stmt.having(
-            func_occurrence <= females*2 + males
-        )
         if ascending:
             if freq_threshold:
                 stmt = stmt.having(func_frequency_new >= freq_threshold)
@@ -303,6 +293,12 @@ class KGenomes(Source):
                 'EUR',
                 'AMR',
                 'SAS'
+            ],
+            self.meta_col_map[Vocabulary.ETHNICITY]: [
+                'latin american',
+                'black or african american',
+                'white',
+                'asian'
             ],
             self.meta_col_map[Vocabulary.HEALTH_STATUS]: [
                 'true'
@@ -398,14 +394,18 @@ class KGenomes(Source):
     # GENERATE DB ENTITIES
     def create_table_of_meta(self, select_columns: Optional[list]):
         """Assigns my_meta_t as the table containing only the individuals with the required metadata characteristics"""
-        if self.meta_attrs.population is not None:
-            self.meta_attrs.super_population = None
         columns_in_select = [metadata]  # take all columns by default
         if select_columns is not None:  # otherwise take the ones in select_columns but make sure item_id is present
             temp_set = set(select_columns)
             temp_set.add('item_id')
             columns_in_select = [metadata.c[col_name] for col_name in temp_set]
-        query = select(columns_in_select)
+        # noinspection SpellCheckingInspection
+        query = select(columns_in_select).where(metadata.c.item_id.in_(
+            text("select item_id from public.item where dataset_id in ( "
+                 "select dataset_id from public.dataset "
+                 "where dataset_name ilike '%1000GENOMES%' "
+                 ")")))
+
         if self.meta_attrs.gender:
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
         if self.meta_attrs.health_status:
@@ -418,6 +418,8 @@ class KGenomes(Source):
             query = query.where(metadata.c.population.in_(self.meta_attrs.population))
         elif self.meta_attrs.super_population:
             query = query.where(metadata.c.super_population.in_(self.meta_attrs.super_population))
+        elif self.meta_attrs.ethnicity:
+            query = query.where(metadata.c.ethnicity.in_(self.meta_attrs.ethnicity))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
         utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, self.logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)

@@ -14,7 +14,7 @@ import warnings
 
 
 _sources: List[Type[Source]] = [
-    TCGA
+    KGenomes, TCGA
 ]
 _annotation_sources: List[Type[AnnotInterface]] = [
     Gencode
@@ -504,6 +504,9 @@ class Coordinator:
         except sqlalchemy.exc.DBAPIError:
             self.logger.exception('Wrong usage of the underlying database')
             return alternative_return_value
+        except EmptyResult as empty_res:
+            self.logger.debug(empty_res)
+            return None
         except Notice as notice:
             # notices are eventually added to the response if the response is still a valid response,
             # or attached to a more severe exception otherwise. So they will be part of the result in any case.
@@ -511,7 +514,7 @@ class Coordinator:
             container_of_notices.append(notice)
             return alternative_return_value
         except Exception:
-            self.logger.exception('unknown exception caught in coordinator')
+            self.logger.exception('unknown exception caught from a source')
             return alternative_return_value
 
     def get_as_dictionary(self, stmt_to_execute, log_with_intro: Optional[str], add_notices: List[Notice]):

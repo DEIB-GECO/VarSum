@@ -118,7 +118,8 @@ class MetadataAttrs:
                  dna_source: Optional[list] = None,
                  assembly: str = None,
                  population: Optional[list] = None,
-                 super_population: Optional[list] = None):
+                 super_population: Optional[list] = None,
+                 ethnicity: Optional[list] = None):
         self.free_dimensions = []
         self.constrained_dimensions = []
 
@@ -153,16 +154,24 @@ class MetadataAttrs:
         if population:
             self.population = population
             self.constrained_dimensions.append(Vocabulary.POPULATION)
-        else:
-            self.population = None
-            self.free_dimensions.append(Vocabulary.POPULATION)
-
-        if super_population:
+            # consistency rule: super_population and ethnicity are free
+            self.super_population, self.ethnicity = None, None
+            self.free_dimensions.extend([Vocabulary.SUPER_POPULATION, Vocabulary.ETHNICITY])
+        elif super_population:
             self.super_population = super_population
             self.constrained_dimensions.append(Vocabulary.SUPER_POPULATION)
+            # consistency rule: population and ethnicity are free
+            self.population, self.ethnicity = None, None
+            self.free_dimensions.extend([Vocabulary.POPULATION, Vocabulary.ETHNICITY])
+        elif ethnicity:
+            self.ethnicity = ethnicity
+            self.constrained_dimensions.append(Vocabulary.ETHNICITY)
+            # consistency rule: population and super_population are free
+            self.population, self.super_population = None, None
+            self.free_dimensions.extend([Vocabulary.POPULATION, Vocabulary.SUPER_POPULATION])
         else:
-            self.super_population = None
-            self.free_dimensions.append(Vocabulary.SUPER_POPULATION)
+            self.population, self.super_population, self.ethnicity = None, None, None
+            self.free_dimensions.extend([Vocabulary.POPULATION, Vocabulary.SUPER_POPULATION, Vocabulary.ETHNICITY])
 
 
 class Vocabulary(Enum):
@@ -175,6 +184,7 @@ class Vocabulary(Enum):
     SUPER_POPULATION = 6
     DOWNLOAD_URL = 7
     DONOR_ID = 8
+    ETHNICITY = 9
 
     # dimensions of region kind
     WITH_VARIANT = 101
@@ -226,6 +236,11 @@ class Notice(Exception):
     """
     def __init__(self, msg_explaining_cause_of_error: str):
         self.msg = msg_explaining_cause_of_error
+
+
+class EmptyResult(Exception):
+    def __init__(self, *args):
+        super().__init__(*args)
 
 
 class SourceWarning(UserWarning):

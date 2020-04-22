@@ -1,6 +1,8 @@
 import sys
 import database.database as database
 from loguru import logger
+from sqlalchemy.exc import SAWarning
+import warnings
 
 wrong_arguments_message = 'The first program argument must be either "server" or "tests" followed by database username, ' \
                           'password and port. Lastly, the severity level of the log messages to see on the console.'
@@ -41,6 +43,9 @@ logger.configure(
         'request_id': 'default'
     }
 )
+
+warnings.simplefilter("ignore", category=SAWarning)
+logger.warning('SQLAlchemy warnings disabled. It is suggested to enable them during debugging.')
 
 if __name__ == '__main__':
     if run == 'server':

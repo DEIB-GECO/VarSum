@@ -18,6 +18,7 @@ class ReqParamKeys:
     ASSEMBLY = 'assembly'
     POPULATION_CODE = 'population'
     SUPER_POPULATION_CODE = 'super_population'
+    ETHNICITY = 'ethnicity'
 
     VARIANTS = 'having_variants'
     WITH_VARIANTS = 'with'
@@ -166,7 +167,8 @@ def prepare_body_parameters(body):
                              dna_source=meta.get(ReqParamKeys.DNA_SOURCE),
                              assembly=meta.get(ReqParamKeys.ASSEMBLY),
                              population=meta.get(ReqParamKeys.POPULATION_CODE),
-                             super_population=meta.get(ReqParamKeys.SUPER_POPULATION_CODE))
+                             super_population=meta.get(ReqParamKeys.SUPER_POPULATION_CODE),
+                             ethnicity=meta.get(ReqParamKeys.ETHNICITY))
 
     variants = body.get(ReqParamKeys.VARIANTS)
     if variants is not None:
@@ -186,15 +188,8 @@ def prepare_body_parameters(body):
                                interval,
                                gene)
 
-    by_attributes = None
-    distribute_by = body.get(ReqParamKeys.BY_ATTRIBUTES)
-    if distribute_by is not None:
-        by_attributes = list()
-        # allow only the following parameter names into distribute_by
-        for att in [ReqParamKeys.GENDER, ReqParamKeys.HEALTH_STATUS, ReqParamKeys.DNA_SOURCE,
-                    ReqParamKeys.POPULATION_CODE, ReqParamKeys.SUPER_POPULATION_CODE]:  # TODO missing mut type
-            if att in distribute_by:
-                by_attributes.append(parse_name_to_vocabulary(att))
+    by_attributes_usr_input = body.get(ReqParamKeys.BY_ATTRIBUTES)
+    by_attributes = [parse_name_to_vocabulary(att) for att in by_attributes_usr_input] if by_attributes_usr_input else None
 
     target_variant = body.get(ReqParamKeys.TARGET_VARIANT)
     if target_variant is not None:
@@ -265,6 +260,8 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.ASSEMBLY
     elif name == ReqParamKeys.GENE_TYPE_IN_VALUES_ENDPOINT:
         return Vocabulary.GENE_TYPE
+    elif name == ReqParamKeys.ETHNICITY:
+        return Vocabulary.ETHNICITY
     else:
         logger.info('name without a match in Vocabulary')
         return None
