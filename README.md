@@ -1,5 +1,5 @@
 # data_summarization_1KGP
-This tool is an example of application of the genomic data repository maintained by Politecnico di Milano - http://www.bioinformatics.deib.polimi.it/geco/ - and it is aimed at describing genomic variation data sources, with a particular focus on the 1000 Genomes Project. This source contains +88 millions variants from ⁓2.5 thousands individauls, who were self-declared healthy and sampled from 26 populations worldwide, including the continents America, Europe, East Asia, South Asia and Africa.
+This tool is an example of application of the genomic data repository maintained by Politecnico di Milano - http://www.bioinformatics.deib.polimi.it/geco/ - and it is aimed at describing genomic variation data sources, with a particular focus on the 1000 Genomes Project. This source contains +88 millions variants from ⁓2.5 thousands individauls, who were self-declared healthy and sampled from 26 populations worldwide, including the continents America, Europe, East Asia, South Asia and Africa. In addition, this source provides ⁓4 millions variants analyzed by the The Cancer Genome Atlas.
 
 The researcher who is interested in identifying a suitable control population for an experiment, can obtain through this tool some summary statistics describing a set of individuals, including:
 - Number of individuals
@@ -20,7 +20,7 @@ Where each of the above characteristics can be fixed in order to restrict the se
 The user can also impose further constraints on the target population, like the presence of some specific variants and their location (same or different chromosome copy) and the presence of variants in a precise genomic area or gene.
 
 ## Abbreviations and terms
-As a reference, below are listed some abbreviations in use across the 1000 Genomes data.
+As a reference, below are listed some abbreviations in use.
 
 #### Ethnicity - Country and Continent of provenance
 
