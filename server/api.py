@@ -279,7 +279,7 @@ def print_output_table(output_dictionary):
 def try_and_catch(function, request_logger, *args, **kwargs):
     # noinspection PyBroadException
     try:
-        return function(*args, **kwargs)
+        return function(*args, **kwargs), 200
     except VariantUndefined as e:
         return bad_variant_parameters(e.args[0], request_logger)
     except GenomicIntervalUndefined as e:
@@ -289,7 +289,7 @@ def try_and_catch(function, request_logger, *args, **kwargs):
         return e.response_body, e.proposed_status_code
     except NoDataFromSources as e:
         request_logger.critical(f'Sources produced no data. Potential notices: {e.response_body}')
-        return (e.response_body, e.proposed_status_code) if e.response_body is not None else service_unavailable_message(request_logger)
+        return e.response_body, e.proposed_status_code if e.response_body is not None else service_unavailable_message(request_logger)
     except sqlalchemy.exc.OperationalError:  # database connection not available / user canceled query
         request_logger.exception('database connection not available / user canceled query')
         return service_unavailable_message(request_logger)

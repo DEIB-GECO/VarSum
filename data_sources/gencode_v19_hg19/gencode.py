@@ -3,7 +3,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import Selectable
 from typing import List
 from data_sources.io_parameters import *
-from data_sources.annot_interface import AnnotInterface
+from data_sources.annot_interface import AnnotInterface, do_not_notify
 import database.database as database
 import database.db_utils as utils
 from threading import RLock
@@ -34,8 +34,8 @@ class Gencode(AnnotInterface):
         Vocabulary.GENE_ID: 'gene_id'
     }
 
-    def __init__(self, logger_instance):
-        super().__init__(logger_instance)
+    def __init__(self, logger_instance, notify_message=do_not_notify):
+        super().__init__(logger_instance, notify_message)
         self.connection: Optional[Connection] = None
         self.init_singleton_table()
 

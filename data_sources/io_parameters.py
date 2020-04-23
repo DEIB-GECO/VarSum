@@ -243,11 +243,18 @@ class EmptyResult(Exception):
         super().__init__(*args)
 
 
-class SourceWarning(UserWarning):
+class SourceMessage:
     """
     This class can be used by any source willing to communicate a problem affecting the result directly to the user. If
     a source uses this warning, the source is expected to provide still a valid result, but the warning message will be
-    attached to the final response together with the normal body of the response.
+    attached to the final response together with the normal body of the response. In order to send this message, the
+    source must have received a callback function from the Coordinator accepting objects of this class.
     """
-    def __init__(self, *args):
-        super().__init__(*args)
+
+    class Type(Enum):
+        TIME_TO_FINISH = 1
+        GENERAL_WARNING = 2
+
+    def __init__(self, msg_type: Type, msg: str):
+        self.type = msg_type
+        self.msg = msg

@@ -8,7 +8,6 @@ import database.db_utils as utils
 import database.database as database
 from threading import RLock
 from loguru import logger
-import warnings
 
 # SOURCE TABLE PARAMETERS
 default_metadata_table_name = 'genomes_metadata_2'
@@ -52,8 +51,8 @@ class TCGA(Source):
 
     log_sql_commands: bool = True
     
-    def __init__(self, logger_instance):
-        super().__init__(logger_instance)
+    def __init__(self, logger_instance, notify_message=do_not_notify):
+        super().__init__(logger_instance, notify_message)
         self.connection: Optional[Connection] = None
         self.init_singleton_tables()
         self.meta_attrs: Optional[MetadataAttrs] = None
@@ -174,8 +173,10 @@ class TCGA(Source):
         other_genders = reduce(lambda x1, x2: x1+x2, [el[1] for el in gender_of_individuals]) - males - females
         self.logger.debug(f'TCGA: request /rank_variants_by_frequency for a population of {males+females+other_genders} individuals')
 
-        warnings.warn('Note for TCGA data: Individuals with an undefined gender have been excluded from the population '
-                      'while calculating the frequency of variants in chromosomes 23 and 24', SourceWarning)
+        self.notify_message(
+            SourceMessage.Type.GENERAL_WARNING,
+            'Note for TCGA data: Individuals with an undefined gender have been excluded from the population while '
+            'calculating the frequency of variants in chromosomes 23 and 24')
 
         # reduce size of the join with regions table
         genomes_red = select(
@@ -340,8 +341,6 @@ class TCGA(Source):
                 db_meta = MetaData()
                 connection = None
                 try:
-                    import warnings
-                    from sqlalchemy.exc import SAWarning
                     connection = database.check_and_get_connection()
                     metadata = Table(default_metadata_table_name,
                                      db_meta,
@@ -353,13 +352,11 @@ class TCGA(Source):
                                     autoload=True,
                                     autoload_with=connection,
                                     schema=default_region_schema_name)
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", category=SAWarning)
-                        public_item = Table('item',
-                                            db_meta,
-                                            autoload=True,
-                                            autoload_with=connection,
-                                            schema='public')
+                    public_item = Table('item',
+                                        db_meta,
+                                        autoload=True,
+                                        autoload_with=connection,
+                                        schema='public')
                 finally:
                     initializing_lock.release()
                     if connection is not None:

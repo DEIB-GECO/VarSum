@@ -3,14 +3,18 @@ from data_sources.source_interface import *
 from data_sources.kgenomes.kgenomes import KGenomes
 from data_sources.tcga.tcga import TCGA
 from data_sources.gencode_v19_hg19.gencode import Gencode
-from typing import List, Type
+from typing import List, Type, Union
 from sqlalchemy.engine import ResultProxy
 from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc
 import sqlalchemy.exc
 import database.database as database
 import concurrent.futures
 import itertools
-import warnings
+import collections
+
+
+def default_user_callback(*msg) -> None:
+    return
 
 
 _sources: List[Type[Source]] = [
@@ -24,8 +28,10 @@ LOG_SQL_STATEMENTS = True
 
 
 class Coordinator:
-    def __init__(self, request_logger):
+    def __init__(self, request_logger, observer: Callable[[str], None] = default_user_callback):
         self.logger = request_logger
+        self.notices = collections.deque()
+        self.observer_callback = observer
 
     def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
                            with_download_url: bool) -> dict:
@@ -38,8 +44,6 @@ class Coordinator:
         if Vocabulary.DONOR_ID not in by_attributes_copy:
             by_attributes_copy.append(Vocabulary.DONOR_ID)
         by_attributes_copy.sort(key=lambda x: x.name)
-    
-        notices = list()
     
         # collect results from individual sources
         def ask_to_source(source: Type[Source]):
@@ -67,7 +71,7 @@ class Coordinator:
                         .select_from(source_stmt)
     
                 return database.try_py_function(donors)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -75,7 +79,7 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             # aggregate the results of all the queries
             by_attributes_as_columns = [column(att.name) for att in by_attributes]
@@ -94,7 +98,7 @@ class Coordinator:
                 .select_from(union(*from_sources).alias("all_sources"))\
                 .group_by(func.cube(*by_attributes_as_columns))
 
-            result = self.get_as_dictionary(stmt, 'DONOR DISTRIBUTION', notices)
+            result = self.get_as_dictionary(stmt, 'DONOR DISTRIBUTION')
             if with_download_url:
                 rows = result['rows']
                 for row in rows:
@@ -113,8 +117,6 @@ class Coordinator:
         by_attributes_copy.update([Vocabulary.DONOR_ID, Vocabulary.GENDER])
         by_attributes_copy = list(by_attributes_copy)
         by_attributes_copy.sort(key=lambda x: x.name)
-    
-        notices = list()
     
         # collect results from individual sources as DONOR_ID | OCCURRENCE | <by_attributes>
         def ask_to_source(source: Type[Source]):
@@ -140,7 +142,7 @@ class Coordinator:
                         .select_from(source_stmt)
     
                 return database.try_py_function(variant_occurrence)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources) + 1) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -152,7 +154,7 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             all_sources = union(*from_sources).alias('all_sources')
             chrom = int(region_of_variant[0])
@@ -179,13 +181,13 @@ class Coordinator:
                 select(by_attributes_as_columns + [func_count_donors, func_count_positive_donors, func_count_occurrence, func_frequency_new]) \
                 .select_from(all_sources)
             if chrom == 23 or chrom == 24:
-                notices.append(Notice('The target variant is located in a non-autosomal chromosome, as such the '
-                                      'individuals of the selected population having unknown gender have been excluded '
-                                      'from the frequency computation.'))
+                self.notices.append(Notice('The target variant is located in a non-autosomal chromosome, as such the '
+                                           'individuals of the selected population having unknown gender have been excluded '
+                                           'from the frequency computation.'))
                 stmt = stmt.where(column(Vocabulary.GENDER.name).in_(['male', 'female']))
             stmt = stmt.group_by(func.cube(*by_attributes_as_columns))
     
-            return self.get_as_dictionary(stmt, 'VARIANT DISTRIBUTION', notices)
+            return self.get_as_dictionary(stmt, 'VARIANT DISTRIBUTION')
 
     def rank_variants_by_freq(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
                               out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> dict:
@@ -194,11 +196,10 @@ class Coordinator:
         eligible_sources = [source for source in _sources if
                             source.can_express_constraint(meta_attrs, region_attrs, source.rank_variants_by_frequency)]
         answer_204_if_no_source_can_answer(eligible_sources)
-        notices = list()
     
         def ask_to_source(source: Type[Source]):
             def do():
-                obj: Source = source(self.logger)
+                obj: Source = source(self.logger, self.source_message_handler)
     
                 def rank_var(connection: Connection):
                     source_stmt = obj.rank_variants_by_frequency(connection, meta_attrs, region_attrs, ascending,
@@ -218,7 +219,7 @@ class Coordinator:
                         .select_from(source_stmt)
     
                 return database.try_py_function(rank_var)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -226,7 +227,7 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             stmt = \
                 select([
@@ -244,16 +245,14 @@ class Coordinator:
                 stmt = stmt.order_by(asc(column(Vocabulary.FREQUENCY.name)), asc(column(Vocabulary.OCCURRENCE.name)))
             else:
                 stmt = stmt.order_by(desc(column(Vocabulary.FREQUENCY.name)), desc(column(Vocabulary.OCCURRENCE.name)))
-            return self.get_as_dictionary(stmt, 'RANKED VARIANTS {}'.format('ASC' if ascending else 'DESC'), notices)
+            return self.get_as_dictionary(stmt, 'RANKED VARIANTS {}'.format('ASC' if ascending else 'DESC'))
     
     def values_of_attribute(self, attribute: Vocabulary) -> dict:
         eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
         eligible_sources.extend([annot_source for annot_source in _annotation_sources if attribute in annot_source.get_available_annotation_types()])
         answer_204_if_no_source_can_answer(eligible_sources)
-
-        notices = list()
     
-        def ask_to_source(source):
+        def ask_to_source(source: Union[Type[Source], Type[AnnotInterface]]):
             def do():
                 obj = source(self.logger)
     
@@ -261,7 +260,7 @@ class Coordinator:
                     return obj.values_of_attribute(connection, attribute)
     
                 return database.try_py_function(values_from_source)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -269,14 +268,14 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result]    # removes Nones and empty lists
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             result = {
                 # merge resulting lists and remove duplicates
                 'values': list(set(list(itertools.chain.from_iterable(from_sources))))
             }
-            if notices:
-                result['notice'] = [notice.args for notice in notices]
+            if self.notices:
+                result['notice'] = [notice.args for notice in self.notices]
             return result
 
     def annotate_variant(self, variant: Mutation, assembly: str) -> dict:
@@ -296,8 +295,6 @@ class Coordinator:
         eligible_sources = [_source for _source in _annotation_sources
                             if not which_annotations.isdisjoint(_source.get_available_annotation_types())]
         answer_204_if_no_source_can_answer(eligible_sources)
-    
-        notices = list()
     
         def ask_to_source(source):
             def do():
@@ -321,7 +318,7 @@ class Coordinator:
                         .select_from(source_stmt)
     
                 return database.try_py_function(annotate_region)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -329,7 +326,7 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             # aggregate the results of all the queries
             stmt = \
@@ -337,7 +334,7 @@ class Coordinator:
                 .select_from(union(*from_sources).alias("all_sources")) \
                 .order_by(literal(1, types.Integer))
     
-            return self.get_as_dictionary(stmt, 'ANNOTATE GENOMIC INTERVAL', notices)
+            return self.get_as_dictionary(stmt, 'ANNOTATE GENOMIC INTERVAL')
 
     def variants_in_gene(self, gene: Gene, assembly: str) -> dict:
         genomic_interval = self.resolve_gene_interval(gene, assembly)
@@ -347,8 +344,6 @@ class Coordinator:
         eligible_sources = _sources
         select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
     
-        notices = list()
-    
         def ask_to_source(source):
             def do():
                 obj: Source = source(self.logger)
@@ -357,7 +352,7 @@ class Coordinator:
                     return obj.variants_in_region(connection, interval, select_attrs, assembly)
     
                 return database.try_py_function(variant_in_region)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
     
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -365,7 +360,7 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             # no need for select distinct as the union does that already
             stmt = \
@@ -373,13 +368,12 @@ class Coordinator:
                 .select_from(union(*from_sources).alias("all_sources")) \
                 .order_by(literal(2, types.Integer))
     
-            return self.get_as_dictionary(stmt, 'VARIANTS IN GENOMIC INTERVAL', notices)
+            return self.get_as_dictionary(stmt, 'VARIANTS IN GENOMIC INTERVAL')
 
     #   HELPER METHODS  #
     def get_region_of_variant(self, variant: Mutation, assembly: str):
         """Returns an array of values corresponding to CHROM, START, STOP of this variant.
         """
-        notices = list()
 
         def ask_to_source(source):
             def do():
@@ -391,7 +385,7 @@ class Coordinator:
 
                 return database.try_py_function(get_region)
 
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
             from_sources = executor.map(ask_to_source, _sources)
@@ -404,8 +398,8 @@ class Coordinator:
             body = {
                 'error': f'The variant {variant} is not present in our genomic variant sources.'
             }
-            if notices:
-                body['notice'] = notices
+            if self.notices:
+                body['notice'] = self.notices
             raise AskUserIntervention(body, 404)
         else:
             # in case multiple sources have the searched variant, the strategy is to take the first result, assuming that
@@ -427,8 +421,6 @@ class Coordinator:
                             if select_from_sources_as_set.issubset(_source.get_available_annotation_types())]
         answer_204_if_no_source_can_answer(eligible_sources)
 
-        notices = list()
-
         def ask_to_source(source):
             def do():
                 obj: AnnotInterface = source(self.logger)
@@ -437,7 +429,7 @@ class Coordinator:
                     return obj.find_gene_region(connection, gene, select_from_sources, assembly)
 
                 return database.try_py_function(var_in_gene)
-            return self.try_catch_source_errors(do, None, notices)
+            return self.try_catch_source_errors(do, None)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
             from_sources = executor.map(ask_to_source, eligible_sources)
@@ -445,13 +437,13 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(notices)
+            raise NoDataFromSources(self.notices)
         else:
             merge_regions = \
                 select(['*']) \
                 .select_from(union(*from_sources).alias('all_annot_sources'))
 
-            result = self.get_as_dictionary(merge_regions, 'FIND GENE', notices)
+            result = self.get_as_dictionary(merge_regions, 'FIND GENE')
             if len(result['rows']) > 1:
                 result['error'] = 'Different genes match the entry data. Please provide more details about the gene of interest'
                 raise AskUserIntervention(result, 300)
@@ -476,16 +468,10 @@ class Coordinator:
         males = next((el[1] for el in females_and_males if el[0] == 'male'), 0)
         return males, females
 
-    def try_catch_source_errors(self, fun, alternative_return_value, container_of_notices: List[Notice]):
+    def try_catch_source_errors(self, fun, alternative_return_value):
         # noinspection PyBroadException
         try:
-            # call fun but catch warnings
-            with warnings.catch_warnings(record=True) as all_warnings:
-                fun_result = fun()
-                for w in all_warnings:
-                    if issubclass(w.category, SourceWarning):
-                        container_of_notices.append(Notice(str(w.message)))
-                return fun_result
+            return fun()
         except sqlalchemy.exc.OperationalError as e:  # database connection not available / user canceled query
             # This exception is not recoverable here, but it subclass the ones below, so I must catch it here and
             # re-raise if I want to let it be handled outside.
@@ -505,28 +491,40 @@ class Coordinator:
             self.logger.exception('Wrong usage of the underlying database')
             return alternative_return_value
         except EmptyResult as empty_res:
-            self.logger.debug(empty_res)
-            return None
+            try:
+                self.logger.debug(f'A source returned prematurely with empty result: '
+                                  f'{empty_res.args[0]}')
+            except IndexError:
+                self.logger.debug('a source returned prematurely with empty result. Forget to pass the name of the '
+                                  'source into the exception EmptyResult')
+            finally:
+                return None
         except Notice as notice:
             # notices are eventually added to the response if the response is still a valid response,
             # or attached to a more severe exception otherwise. So they will be part of the result in any case.
             self.logger.info(notice.msg)
-            container_of_notices.append(notice)
+            self.notices.append(notice)
             return alternative_return_value
         except Exception:
             self.logger.exception('unknown exception caught from a source')
             return alternative_return_value
 
-    def get_as_dictionary(self, stmt_to_execute, log_with_intro: Optional[str], add_notices: List[Notice]):
+    def get_as_dictionary(self, stmt_to_execute, log_with_intro: Optional[str]):
         log_fun = self.logger.debug if LOG_SQL_STATEMENTS else None
         result_proxy: ResultProxy = database.try_stmt(stmt_to_execute, log_fun, log_with_intro)
         result = {
             'columns': result_proxy.keys(),
             'rows': [row.values() for row in result_proxy.fetchall()]
         }
-        if add_notices:
-            result['notice'] = [notice.args[0] for notice in add_notices]
+        if self.notices:
+            result['notice'] = [notice.args[0] for notice in self.notices]
         return result
+
+    def source_message_handler(self, msg_type: SourceMessage.Type, msg: str):
+        if msg_type == SourceMessage.Type.TIME_TO_FINISH:
+            self.observer_callback(msg)
+        else:
+            self.notices.append(Notice(msg))
 
 
 def answer_204_if_no_source_can_answer(eligible_sources):
@@ -547,7 +545,7 @@ class NoDataFromSources(Exception):
     response_body = None
     proposed_status_code = 400
 
-    def __init__(self, notices: Optional[list] = None):
+    def __init__(self, notices=None):
         super().__init__(notices)
         if notices:
             self.response_body = {

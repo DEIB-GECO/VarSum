@@ -59,8 +59,8 @@ class KGenomes(Source):
 
     log_sql_commands: bool = True
     
-    def __init__(self, logger_instance):
-        super().__init__(logger_instance)
+    def __init__(self, logger_instance, notify_message=do_not_notify):
+        super().__init__(logger_instance, notify_message)
         self.connection: Optional[Connection] = None
         self.init_singleton_tables()
         self.meta_attrs: Optional[MetadataAttrs] = None
@@ -331,8 +331,6 @@ class KGenomes(Source):
                 db_meta = MetaData()
                 connection = None
                 try:
-                    import warnings
-                    from sqlalchemy.exc import SAWarning
                     connection = database.check_and_get_connection()
                     metadata = Table(default_metadata_table_name,
                                      db_meta,
@@ -344,13 +342,11 @@ class KGenomes(Source):
                                     autoload=True,
                                     autoload_with=connection,
                                     schema=default_region_schema_name)
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", category=SAWarning)
-                        public_item = Table('item',
-                                            db_meta,
-                                            autoload=True,
-                                            autoload_with=connection,
-                                            schema='public')
+                    public_item = Table('item',
+                                        db_meta,
+                                        autoload=True,
+                                        autoload_with=connection,
+                                        schema='public')
                 finally:
                     initializing_lock.release()
                     if connection is not None:

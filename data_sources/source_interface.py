@@ -1,7 +1,11 @@
 from data_sources.io_parameters import *
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import FromClause
-from typing import List
+from typing import List, Callable
+
+
+def do_not_notify(type: SourceMessage.Type, msg: str) -> None:
+    return
 
 
 class Source:
@@ -18,8 +22,9 @@ class Source:
     meta_col_map: dict = {}
     avail_region_constraints: set = set()
 
-    def __init__(self, logger_instance):
+    def __init__(self, logger_instance, notify_message: Callable[[SourceMessage.Type, str], None] = do_not_notify):
         self.logger = logger_instance
+        self.notify_message = notify_message
 
     def donors(self, connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs,
                region_attrs: RegionAttrs, with_download_urls: bool) -> FromClause:
