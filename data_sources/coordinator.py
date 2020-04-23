@@ -494,11 +494,12 @@ class Coordinator:
             try:
                 self.logger.debug(f'A source returned prematurely with empty result: '
                                   f'{empty_res.args[0]}')
+                self.notices.append(Notice(empty_res.args[0]))
             except IndexError:
-                self.logger.debug('a source returned prematurely with empty result. Forget to pass the name of the '
+                self.logger.error('a source returned prematurely with empty result. Forget to pass the name of the '
                                   'source into the exception EmptyResult')
             finally:
-                return None
+                return alternative_return_value
         except Notice as notice:
             # notices are eventually added to the response if the response is still a valid response,
             # or attached to a more severe exception otherwise. So they will be part of the result in any case.

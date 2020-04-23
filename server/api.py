@@ -74,7 +74,7 @@ def donor_distribution(body):
         req_logger.info(f'new request to /donor_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
         result = Coordinator(req_logger).donor_distribution(params[2], params[0], params[1], params[7])
-        return result_if_not_none(result, req_logger)
+        return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -84,7 +84,7 @@ def variant_distribution(body):
         req_logger.info(f'new request to /variant_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
         result = Coordinator(req_logger).variant_distribution(params[2], params[0], params[1], params[3])
-        return result_if_not_none(result, req_logger)
+        return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -94,7 +94,7 @@ def most_common_variants(body):
         req_logger.info(f'new request to /most_common_variants with request_body: {body}')
         params = prepare_body_parameters(body)
         result = Coordinator(req_logger).rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
-        return result_if_not_none(result, req_logger)
+        return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -104,7 +104,7 @@ def rarest_variants(body):
         req_logger.info(f'new request to /rarest_variants with request_body: {body}')
         params = prepare_body_parameters(body)
         result = Coordinator(req_logger).rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
-        return result_if_not_none(result, req_logger)
+        return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -118,7 +118,7 @@ def values(attribute):
             return f'Attribute {attribute} is not a valid parameter for this request', 400
         else:
             result = Coordinator(req_logger).values_of_attribute(item)
-            return result_if_not_none(result, req_logger)
+            return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -132,7 +132,7 @@ def annotate(body):
         else:
             variant = parse_variant_from_dict(body)
             result = Coordinator(req_logger).annotate_variant(variant, body.get(ReqParamKeys.ASSEMBLY))
-        return result_if_not_none(result, req_logger)
+        return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -146,7 +146,7 @@ def variants_in_region(body):
         else:
             gene = parse_gene_from_dict(body)
             result = Coordinator(req_logger).variants_in_gene(gene, body.get(ReqParamKeys.ASSEMBLY))
-        return result_if_not_none(result, req_logger)
+        return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
 
@@ -279,7 +279,13 @@ def print_output_table(output_dictionary):
 def try_and_catch(function, request_logger, *args, **kwargs):
     # noinspection PyBroadException
     try:
-        return function(*args, **kwargs), 200
+        result = function(*args, **kwargs)
+        if result is not None:
+            request_logger.success('response ok')
+            return result, 200
+        else:
+            request_logger.error('Coordinator returned None')
+            return service_unavailable_message(request_logger)
     except VariantUndefined as e:
         return bad_variant_parameters(e.args[0], request_logger)
     except GenomicIntervalUndefined as e:
@@ -289,7 +295,8 @@ def try_and_catch(function, request_logger, *args, **kwargs):
         return e.response_body, e.proposed_status_code
     except NoDataFromSources as e:
         request_logger.critical(f'Sources produced no data. Potential notices: {e.response_body}')
-        return e.response_body, e.proposed_status_code if e.response_body is not None else service_unavailable_message(request_logger)
+        # don't delete the braces, or Flask can't unpack the result correctly
+        return (e.response_body, e.proposed_status_code) if e.response_body is not None else service_unavailable_message(request_logger)
     except sqlalchemy.exc.OperationalError:  # database connection not available / user canceled query
         request_logger.exception('database connection not available / user canceled query')
         return service_unavailable_message(request_logger)
@@ -326,15 +333,6 @@ def unique_logger():
     global request_incremental_index
     request_incremental_index += 1
     return logger.bind(request_id=request_incremental_index)
-
-
-def result_if_not_none(result, req_logger):
-    if result is not None:
-        req_logger.success('response ok')
-        return result
-    else:
-        req_logger.error('response says service_unavailable_message')
-        return service_unavailable_message(req_logger)
 
 
 if __name__ == '__main__':
