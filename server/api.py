@@ -12,6 +12,7 @@ class ReqParamKeys:
     This class maps the attribute names used in the api_definition.yml to constants used in this module only.
     """
     META = 'having_meta'
+    OF = 'of'  # is used as alias of having_meta in the context of: find variants in region
     GENDER = 'gender'
     HEALTH_STATUS = 'health_status'
     DNA_SOURCE = 'dna_source'
@@ -143,13 +144,15 @@ def annotate(body):
 def variants_in_region(body):
     def go():
         req_logger.info(f'new request to /variants_in_region with request_body: {body}')
-        sources = body.get(ReqParamKeys.GEN_VAR_SOURCES)
+        optional_params = prepare_body_parameters(body)
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = Coordinator(req_logger, sources).variants_in_genomic_interval(interval, body.get(ReqParamKeys.ASSEMBLY))
+            result = Coordinator(req_logger, optional_params[8]) \
+                .variants_in_genomic_interval(interval, optional_params[0], optional_params[1])
         else:
             gene = parse_gene_from_dict(body)
-            result = Coordinator(req_logger, sources).variants_in_gene(gene, body.get(ReqParamKeys.ASSEMBLY))
+            result = Coordinator(req_logger, optional_params[8])\
+                .variants_in_gene(gene, optional_params[0], optional_params[1])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -165,7 +168,7 @@ def home():
 # ###########################       TRANSFORM INPUT
 def prepare_body_parameters(body):
     var_sources = body.get(ReqParamKeys.GEN_VAR_SOURCES)
-    meta = body.get(ReqParamKeys.META)
+    meta = body.get(ReqParamKeys.META) or body.get(ReqParamKeys.OF)
     if meta is not None:
         meta = MetadataAttrs(gender=meta.get(ReqParamKeys.GENDER),
                              health_status=meta.get(ReqParamKeys.HEALTH_STATUS),
@@ -175,7 +178,8 @@ def prepare_body_parameters(body):
                              super_population=meta.get(ReqParamKeys.SUPER_POPULATION_CODE),
                              ethnicity=meta.get(ReqParamKeys.ETHNICITY))
 
-    variants = body.get(ReqParamKeys.VARIANTS)
+    variants = body.get(ReqParamKeys.VARIANTS) or \
+               (body.get(ReqParamKeys.OF).get(ReqParamKeys.VARIANTS) if body.get(ReqParamKeys.OF) else None)
     if variants is not None:
         if variants.get(ReqParamKeys.WITH_VARS_IN) is not None:
             if variants[ReqParamKeys.WITH_VARS_IN].get(ReqParamKeys.STOP):

@@ -626,17 +626,29 @@ class KGenomes(Source):
                      schema=default_schema_to_use_name)
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
-                           output_region_attrs: List[Vocabulary], assembly) -> Selectable:
+                           output_region_attrs: List[Vocabulary], meta_attrs: MetadataAttrs,
+                           region_attrs: Optional[RegionAttrs]) -> Selectable:
+        # init state
+        self.connection = connection
+        self._set_meta_attributes(meta_attrs)
+        self.create_table_of_meta(['item_id'])
+        self._set_region_attributes(region_attrs)
+        self.create_table_of_regions(['item_id'])
+
+        if self.my_region_t is not None:
+            only_from_samples = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))
+        else:
+            only_from_samples = select([self.my_meta_t.c.item_id])
+        only_from_samples = only_from_samples.alias('samples')
+
         select_columns = [genomes.c[self.region_col_map[att]].label(att.name) for att in output_region_attrs]
         stmt =\
             select(select_columns).distinct() \
+            .select_from(genomes.join(only_from_samples, only_from_samples.c.item_id == genomes.c.item_id)) \
             .where((genomes.c.start >= genomic_interval.start) &
                    (genomes.c.start <= genomic_interval.stop) &
-                   (genomes.c.chrom == genomic_interval.chrom)) \
-            .where(genomes.c.item_id.in_(
-                select([metadata.c.item_id])
-                .where(metadata.c.assembly == assembly)
-            ))
+                   (genomes.c.chrom == genomic_interval.chrom))
+
         if self.log_sql_commands:
             utils.show_stmt(connection, stmt, self.logger.debug, f'KGenomes: VARIANTS IN REGION '
                                                                  f'{genomic_interval.chrom}'

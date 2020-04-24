@@ -1,6 +1,6 @@
 from ..source_interface import *
 from ..io_parameters import *
-from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, text, literal, column, types, case
+from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, text, literal, column, types, case, intersect
 from sqlalchemy.sql.expression import Selectable
 from sqlalchemy.engine import Connection
 from functools import reduce
@@ -533,23 +533,34 @@ class TCGA(Source):
                      schema=default_schema_to_use_name)
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
-                           output_region_attrs: List[Vocabulary], assembly) -> Selectable:
+                           output_region_attrs: List[Vocabulary], meta_attrs: MetadataAttrs,
+                           region_attrs: Optional[RegionAttrs]) -> Selectable:
+        # init state
+        self.connection = connection
+        self._set_meta_attributes(meta_attrs)
+        self.create_table_of_meta(['item_id'])
+        self._set_region_attributes(region_attrs)
+        self.create_table_of_regions(['item_id'])
+
+        if self.my_region_t is not None:
+            only_from_samples = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id]))
+        else:
+            only_from_samples = select([self.my_meta_t.c.item_id])
+        only_from_samples = only_from_samples.alias('samples')
+
         select_columns = list()
         for att in output_region_attrs:
             if att == Vocabulary.CHROM:
                 select_columns.append(cast(regions.c.chrom, types.SmallInteger).label(att.name))
             else:
                 select_columns.append(regions.c[self.region_col_map[att]].label(att.name))
-
         stmt =\
             select(select_columns).distinct() \
+            .select_from(regions.join(only_from_samples, only_from_samples.c.item_id == regions.c.item_id)) \
             .where((regions.c.start >= genomic_interval.start) &
                    (regions.c.start <= genomic_interval.stop) &
-                   (regions.c.chrom == str(genomic_interval.chrom))) \
-            .where(regions.c.item_id.in_(
-                select([metadata.c.item_id])
-                .where(metadata.c.assembly == assembly)
-            ))
+                   (regions.c.chrom == str(genomic_interval.chrom)))
+
         if self.log_sql_commands:
             utils.show_stmt(connection, stmt, self.logger.debug, f'TCGA: VARIANTS IN REGION '
                                                                  f'{genomic_interval.chrom}'

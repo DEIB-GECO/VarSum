@@ -492,22 +492,27 @@ paths:
                   - $ref: '#/components/schemas/GenomicInterval'
                 - type: object
                   properties:
-                    assembly:
-                      type: string
-                      enum: ['hg19', 'grch38']
                     source:
                       $ref: '#/components/schemas/GenomicSource'
+                    of:
+                      allOf:
+                       - $ref: '#/components/schemas/FilterMetadata'
+                      properties:
+                        having_variants:
+                          $ref: '#/components/schemas/FilterVariants'
                   required:
-                    - assembly
+                    - of
             examples:
               Variants overlapping with gene:
                 value:
-                  assembly: hg19
+                  of:
+                    assembly: hg19
                   name: DDX11L1
                   type: pseudogene
               Variants located in genomic region:
                 value:
-                  assembly: hg19
+                  of:
+                    assembly: hg19
                   chrom: 1
                   start: 29500
                   stop: 50000

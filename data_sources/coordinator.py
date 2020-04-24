@@ -351,12 +351,14 @@ class Coordinator:
     
             return self.get_as_dictionary(stmt, 'ANNOTATE GENOMIC INTERVAL')
 
-    def variants_in_gene(self, gene: Gene, assembly: str) -> dict:
-        genomic_interval = self.resolve_gene_interval(gene, assembly)
-        return self.variants_in_genomic_interval(genomic_interval, assembly)
+    def variants_in_gene(self, gene: Gene, meta_attrs: MetadataAttrs, region_attrs: Optional[RegionAttrs]) -> dict:
+        genomic_interval = self.resolve_gene_interval(gene, meta_attrs.assembly)
+        return self.variants_in_genomic_interval(genomic_interval, meta_attrs, region_attrs)
 
-    def variants_in_genomic_interval(self, interval: GenomicInterval, assembly: str) -> dict:
-        eligible_sources = self.use_sources
+    def variants_in_genomic_interval(self, interval: GenomicInterval, meta_attrs: MetadataAttrs, region_attrs: Optional[RegionAttrs]) -> dict:
+        eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.variants_in_region)]
+        answer_204_if_no_source_can_answer(eligible_sources)
+        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
         select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
     
         def ask_to_source(source):
@@ -364,7 +366,7 @@ class Coordinator:
                 obj: Source = source(self.logger)
     
                 def variant_in_region(connection: Connection):
-                    return obj.variants_in_region(connection, interval, select_attrs, assembly)
+                    return obj.variants_in_region(connection, interval, select_attrs, meta_attrs, region_attrs)
     
                 return database.try_py_function(variant_in_region)
             return self.try_catch_source_errors(do, None)

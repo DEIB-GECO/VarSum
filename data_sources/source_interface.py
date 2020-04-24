@@ -101,14 +101,16 @@ class Source:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "get_variant_details".')
 
     def variants_in_region(self, connection: Connection, genomic_interval: GenomicInterval,
-                           output_region_attrs: List[Vocabulary], assembly: str) -> FromClause:
+                           output_region_attrs: List[Vocabulary], meta_attrs: MetadataAttrs,
+                           region_attrs: Optional[RegionAttrs]) -> FromClause:
         """
         The source must return a table or a statement selecting the variants located inside the given "genomic_interval".
         Each variant must be provided with the "output_region_attrs" requested.
-        :param assembly:
         :param connection:
         :param genomic_interval:
         :param output_region_attrs:
+        :param meta_attrs:
+        :param region_attrs:
         :return:
         """
         raise NotImplementedError('Any subclass of Source must implement the abstract method "variants_in_genomic_interval".')
