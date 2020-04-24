@@ -78,7 +78,7 @@ class Gencode(AnnotInterface):
         return stmt
 
     # noinspection SpellCheckingInspection
-    def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
+    def values_of_attribute(self, connection, attribute: Vocabulary) -> (str, List):
         distinct_values = {
             self.col_map[Vocabulary.GENE_TYPE]: [
                 'sense_overlapping',
@@ -112,7 +112,7 @@ class Gencode(AnnotInterface):
                 'TR_D_gene'
                 ]
         }
-        return distinct_values.get(self.col_map.get(attribute))
+        return 'GENCODE', distinct_values.get(self.col_map.get(attribute))
 
     @staticmethod
     def init_singleton_table():
