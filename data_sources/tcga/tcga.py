@@ -36,7 +36,8 @@ class TCGA(Source):
     # REGION CONSTRAINTS THAT CAN BE EXPRESSED WITH THIS SOURCE (REQUIRED BY SOURCE)
     avail_region_constraints = {
         Vocabulary.WITH_VARIANT,
-        Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL
+        Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL,
+        Vocabulary.WITH_VARIANTS_IN_SOMATIC_CELLS
     }
     region_col_map = {
         Vocabulary.CHROM: 'chrom',
@@ -315,7 +316,7 @@ class TCGA(Source):
             ],
             'mut_type': ['SNP', 'DEL', 'INS', 'DNP', 'TNP']
         }
-        return distinct_values.get(self.meta_col_map.get(attribute))
+        return 'TCGA', distinct_values.get(self.meta_col_map.get(attribute))
 
     # SETTERS
     def _set_region_attributes(self, region_attrs: RegionAttrs):

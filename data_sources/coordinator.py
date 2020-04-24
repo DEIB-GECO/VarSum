@@ -3,7 +3,7 @@ from data_sources.source_interface import *
 from data_sources.kgenomes.kgenomes import KGenomes
 from data_sources.tcga.tcga import TCGA
 from data_sources.gencode_v19_hg19.gencode import Gencode
-from typing import List, Type, Union
+from typing import List, Type, Union, Iterable, Sequence
 from sqlalchemy.engine import ResultProxy
 from sqlalchemy import select, union, func, literal, column, cast, types, desc, asc
 import sqlalchemy.exc
@@ -17,10 +17,14 @@ def default_user_callback(*msg) -> None:
     return
 
 
-_sources: List[Type[Source]] = [
-    KGenomes, TCGA
-]
-_annotation_sources: List[Type[AnnotInterface]] = [
+gen_var_sources = {
+    '1000Genomes': KGenomes,
+    'TCGA': TCGA
+}
+# gen_var_sources: Sequence[Type[Source]] = (
+#     KGenomes, TCGA
+# )
+_annotation_sources: Iterable[Type[AnnotInterface]] = [
     Gencode
 ]
 
@@ -28,16 +32,18 @@ LOG_SQL_STATEMENTS = True
 
 
 class Coordinator:
-    def __init__(self, request_logger, observer: Callable[[str], None] = default_user_callback):
+    def __init__(self, request_logger, filter_sources: Optional[Sequence[str]] = None, observer: Callable[[str], None] = default_user_callback):
         self.logger = request_logger
         self.notices = collections.deque()
+        self.use_sources = [gen_var_sources[name] for name in filter_sources] or gen_var_sources.values() if filter_sources else gen_var_sources.values()
         self.observer_callback = observer
 
     def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
                            with_download_url: bool) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
-        eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
+        eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
         answer_204_if_no_source_can_answer(eligible_sources)
+        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
         by_attributes_copy = by_attributes.copy()
@@ -109,8 +115,9 @@ class Coordinator:
 
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
-        eligible_sources = [source for source in _sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
+        eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
         answer_204_if_no_source_can_answer(eligible_sources)
+        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
         by_attributes_copy = set(by_attributes)
@@ -193,9 +200,10 @@ class Coordinator:
                               out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         limit_result = limit_result or 10
-        eligible_sources = [source for source in _sources if
+        eligible_sources = [source for source in self.use_sources if
                             source.can_express_constraint(meta_attrs, region_attrs, source.rank_variants_by_frequency)]
         answer_204_if_no_source_can_answer(eligible_sources)
+        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
     
         def ask_to_source(source: Type[Source]):
             def do():
@@ -248,7 +256,7 @@ class Coordinator:
             return self.get_as_dictionary(stmt, 'RANKED VARIANTS {}'.format('ASC' if ascending else 'DESC'))
     
     def values_of_attribute(self, attribute: Vocabulary) -> dict:
-        eligible_sources = [source for source in _sources if attribute in source.get_available_attributes()]
+        eligible_sources = [source for source in self.use_sources if attribute in source.get_available_attributes()]
         eligible_sources.extend([annot_source for annot_source in _annotation_sources if attribute in annot_source.get_available_annotation_types()])
         answer_204_if_no_source_can_answer(eligible_sources)
     
@@ -270,10 +278,17 @@ class Coordinator:
         if len(from_sources) == 0:
             raise NoDataFromSources(self.notices)
         else:
-            result = {
-                # merge resulting lists and remove duplicates
-                'values': list(set(list(itertools.chain.from_iterable(from_sources))))
-            }
+            only_values = [res[1] for res in from_sources]  # list of lists of values
+            unique_values = list(set(list(itertools.chain.from_iterable(only_values))))  # list of values
+
+            def find_in_source(val: str) -> list:
+                find_in = []
+                for source_name_and_values in from_sources:
+                    if val in source_name_and_values[1]:
+                        find_in.append(source_name_and_values[0])
+                return find_in
+
+            result = {value: find_in_source(value) for value in unique_values}
             if self.notices:
                 result['notice'] = [notice.args for notice in self.notices]
             return result
@@ -341,7 +356,7 @@ class Coordinator:
         return self.variants_in_genomic_interval(genomic_interval, assembly)
 
     def variants_in_genomic_interval(self, interval: GenomicInterval, assembly: str) -> dict:
-        eligible_sources = _sources
+        eligible_sources = self.use_sources
         select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
     
         def ask_to_source(source):
@@ -387,8 +402,8 @@ class Coordinator:
 
             return self.try_catch_source_errors(do, None)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(_sources)) as executor:
-            from_sources = executor.map(ask_to_source, _sources)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.use_sources)) as executor:
+            from_sources = executor.map(ask_to_source, self.use_sources)
 
         # remove failures
         from_sources = [result for result in from_sources if result is not None and len(result) > 0]
@@ -526,6 +541,18 @@ class Coordinator:
             self.observer_callback(msg)
         else:
             self.notices.append(Notice(msg))
+
+    def warn_if_mixed_germline_somatic_vars(self, eligible_sources: Iterable[Type[Source]]):
+        cell_types = set()
+        for s in eligible_sources:
+            if Vocabulary.WITH_VARIANTS_IN_SOMATIC_CELLS in s.avail_region_constraints:
+                cell_types.add(Vocabulary.WITH_VARIANTS_IN_SOMATIC_CELLS)
+            if Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS in s.avail_region_constraints:
+                cell_types.add(Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS)
+        if Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS in cell_types and Vocabulary.WITH_VARIANTS_IN_SOMATIC_CELLS in cell_types:
+            self.notices.append(Notice("This response may contain data from mixed germline and somatic mutations data "
+                                       "sources. If that's not the desired output, you can constrain the cell "
+                                       "type with the parameter having_variants -> in_cell_type."))
 
 
 def answer_204_if_no_source_can_answer(eligible_sources):

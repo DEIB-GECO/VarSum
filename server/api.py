@@ -25,6 +25,7 @@ class ReqParamKeys:
     WITH_VARS_ON_SAME_CHROM_COPY = 'on_same_chrom_copy'
     WITH_VARS_ON_DIFF_CHROM_COPY = 'on_diff_chrom_copy'
     WITH_VARS_IN = 'in'
+    WITH_VARS_IN_CELL_TYPE = 'in_cell_type'
 
     OUTPUT = 'filter_output'
     OUT_MIN_FREQUENCY = 'min_frequency'
@@ -50,6 +51,8 @@ class ReqParamKeys:
     GENE_TYPE_IN_VALUES_ENDPOINT = 'gene_type'
     GENE_ID = 'ensemble_id'
 
+    GEN_VAR_SOURCES = 'source'
+
 
 connexion_app = connexion.App(__name__, specification_dir='./')  # internally it starts flask
 flask_app = connexion_app.app
@@ -73,7 +76,7 @@ def donor_distribution(body):
     def go():
         req_logger.info(f'new request to /donor_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger).donor_distribution(params[2], params[0], params[1], params[7])
+        result = Coordinator(req_logger, params[8]).donor_distribution(params[2], params[0], params[1], params[7])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -83,7 +86,7 @@ def variant_distribution(body):
     def go():
         req_logger.info(f'new request to /variant_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger).variant_distribution(params[2], params[0], params[1], params[3])
+        result = Coordinator(req_logger, params[8]).variant_distribution(params[2], params[0], params[1], params[3])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -93,7 +96,7 @@ def most_common_variants(body):
     def go():
         req_logger.info(f'new request to /most_common_variants with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger).rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
+        result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -103,7 +106,7 @@ def rarest_variants(body):
     def go():
         req_logger.info(f'new request to /rarest_variants with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger).rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
+        result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -140,12 +143,13 @@ def annotate(body):
 def variants_in_region(body):
     def go():
         req_logger.info(f'new request to /variants_in_region with request_body: {body}')
+        sources = body.get(ReqParamKeys.GEN_VAR_SOURCES)
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = Coordinator(req_logger).variants_in_genomic_interval(interval, body.get(ReqParamKeys.ASSEMBLY))
+            result = Coordinator(req_logger, sources).variants_in_genomic_interval(interval, body.get(ReqParamKeys.ASSEMBLY))
         else:
             gene = parse_gene_from_dict(body)
-            result = Coordinator(req_logger).variants_in_gene(gene, body.get(ReqParamKeys.ASSEMBLY))
+            result = Coordinator(req_logger, sources).variants_in_gene(gene, body.get(ReqParamKeys.ASSEMBLY))
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -160,6 +164,7 @@ def home():
 
 # ###########################       TRANSFORM INPUT
 def prepare_body_parameters(body):
+    var_sources = body.get(ReqParamKeys.GEN_VAR_SOURCES)
     meta = body.get(ReqParamKeys.META)
     if meta is not None:
         meta = MetadataAttrs(gender=meta.get(ReqParamKeys.GENDER),
@@ -186,7 +191,8 @@ def prepare_body_parameters(body):
                                parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY)),
                                parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY)),
                                interval,
-                               gene)
+                               gene,
+                               variants.get(ReqParamKeys.WITH_VARS_IN_CELL_TYPE))
 
     by_attributes_usr_input = body.get(ReqParamKeys.BY_ATTRIBUTES)
     by_attributes = [parse_name_to_vocabulary(att) for att in by_attributes_usr_input] if by_attributes_usr_input else None
@@ -206,7 +212,7 @@ def prepare_body_parameters(body):
 
     include_download_url = body.get(ReqParamKeys.INCLUDE_DOWNLOAD_URL) or False
 
-    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency, include_download_url
+    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency, include_download_url, var_sources
 
 
 def parse_to_mutation_array(dict_array_of_mutations):

@@ -45,19 +45,23 @@ paths:
               schema:
                 type: object
                 properties:
-                  values:
-                    type: array
-                    items:
-                      type: string
+                  value:
+                    $ref: '#/components/schemas/GenomicSource'
               examples:
                 gender:
                   value:
-                    values:
-                      ['male', 'female']
+                    female:
+                      ['1000Genomes', 'TCGA']
+                    male:
+                      ['1000Genomes', 'TCGA']
+                    not_reported:
+                      ['TCGA']
                 dna_source:
                   value:
-                    values:
-                      ['lcl', 'blood']
+                    blood:
+                      ['1000Genomes']
+                    lcl:
+                      ['1000Genomes']
         '400':
           description: The parameter does not exists.
         '503':
@@ -81,6 +85,8 @@ paths:
                 - having_meta
                 - distribute_by
               properties:
+                source:
+                  $ref: '#/components/schemas/GenomicSource'
                 distribute_by:
                   $ref: '#/components/schemas/DistributeBy'
                 donors_download_url:
@@ -162,6 +168,8 @@ paths:
                 - distribute_by
                 - target_variant
               properties:
+                source:
+                  $ref: '#/components/schemas/GenomicSource'
                 distribute_by:
                   $ref: '#/components/schemas/DistributeBy'
                 having_meta:
@@ -251,6 +259,8 @@ paths:
                 - having_meta
                 - having_variants
               properties:
+                source:
+                  $ref: '#/components/schemas/GenomicSource'
                 having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 having_variants:
@@ -332,6 +342,8 @@ paths:
                 - having_meta
                 - having_variants
               properties:
+                source:
+                  $ref: '#/components/schemas/GenomicSource'
                 having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 having_variants:
@@ -483,6 +495,8 @@ paths:
                     assembly:
                       type: string
                       enum: ['hg19', 'grch38']
+                    source:
+                      $ref: '#/components/schemas/GenomicSource'
                   required:
                     - assembly
             examples:
@@ -626,6 +640,11 @@ components:
           oneOf:
             - $ref: '#/components/schemas/GenomicInterval'
             - $ref: '#/components/schemas/Gene'
+        in_cell_type:
+          type: array
+          items:
+            type: string
+            enum: [germline, somatic]
 
     DistributeBy:
       type: array
@@ -662,3 +681,9 @@ components:
             string
       required:
         - name
+
+    GenomicSource:
+      type: array
+      items:
+        type: string
+        enum: [1000Genomes, TCGA]

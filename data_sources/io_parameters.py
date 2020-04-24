@@ -74,7 +74,8 @@ class RegionAttrs:
                  with_variants_same_c_copy: Optional[list] = None,
                  with_variants_diff_c_copy: Optional[list] = None,
                  with_variants_in_genomic_region: Optional[GenomicInterval] = None,
-                 with_variants_in_gene: Optional[Gene] = None
+                 with_variants_in_gene: Optional[Gene] = None,
+                 in_cell_type: Optional[list] = None
                  ):
         self.requires = set()
 
@@ -104,8 +105,15 @@ class RegionAttrs:
 
         if with_variants_in_gene:
             self.with_variants_in_gene = with_variants_in_gene
+            self.requires.add(Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL)
         else:
             self.with_variants_in_gene = None
+
+        if in_cell_type:
+            if 'germline' in in_cell_type:
+                self.requires.add(Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS)
+            if 'somatic' in in_cell_type:
+                self.requires.add(Vocabulary.WITH_VARIANTS_IN_SOMATIC_CELLS)
 
         self.with_variants_of_type: Optional[list] = None
 
@@ -191,6 +199,8 @@ class Vocabulary(Enum):
     WITH_VARIANT_SAME_C_COPY = 102
     WITH_VARIANT_DIFF_C_COPY = 103
     WITH_VARIANT_IN_GENOMIC_INTERVAL = 104
+    WITH_VARIANTS_IN_GERMLINE_CELLS = 105
+    WITH_VARIANTS_IN_SOMATIC_CELLS = 106
     # TODO extend with region intervals and type
 
     # measures

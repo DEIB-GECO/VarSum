@@ -41,7 +41,8 @@ class KGenomes(Source):
         Vocabulary.WITH_VARIANT,
         Vocabulary.WITH_VARIANT_SAME_C_COPY,
         Vocabulary.WITH_VARIANT_DIFF_C_COPY,
-        Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL
+        Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL,
+        Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS
     }
     region_col_map = {
         Vocabulary.CHROM: 'chrom',
@@ -305,7 +306,7 @@ class KGenomes(Source):
             ],
             'mut_type': ['SNP', 'DEL', 'INS', 'CNV', 'MNP', 'SVA', 'ALU', 'LINE1']
         }
-        return distinct_values.get(self.meta_col_map.get(attribute))
+        return '1000Genomes', distinct_values.get(self.meta_col_map.get(attribute))
 
     # SETTERS
     def _set_region_attributes(self, region_attrs: RegionAttrs):

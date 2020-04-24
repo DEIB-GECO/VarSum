@@ -77,9 +77,9 @@ class Source:
         """
         raise NotImplementedError('Any subclass of Source must implement the abstract method "rank_variants_by_frequency".')
 
-    def values_of_attribute(self, connection, attribute: Vocabulary) -> List:
+    def values_of_attribute(self, connection, attribute: Vocabulary) -> (str, List):
         """
-        Request a source to return a list of the values available for the "attribute".
+        Request a source to return the name of the source and a list of the values available for the "attribute".
         :param connection:
         :param attribute:
         :return:
