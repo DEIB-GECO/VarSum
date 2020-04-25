@@ -304,7 +304,7 @@ def try_and_catch(function, request_logger, *args, **kwargs):
         request_logger.info(f'Asking for user intervention with response {e.proposed_status_code}')
         return e.response_body, e.proposed_status_code
     except NoDataFromSources as e:
-        request_logger.critical(f'Sources produced no data. Potential notices: {e.response_body}')
+        request_logger.warning(f'Sources produced no data. Potential notices: {e.response_body}')
         # don't delete the braces, or Flask can't unpack the result correctly
         return (e.response_body, e.proposed_status_code) if e.response_body is not None else service_unavailable_message(request_logger)
     except sqlalchemy.exc.OperationalError:  # database connection not available / user canceled query

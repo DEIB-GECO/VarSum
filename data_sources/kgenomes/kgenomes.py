@@ -153,13 +153,18 @@ class KGenomes(Source):
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
 
+        if self.my_region_t is None:
+            raise Notice("1000Genomes data set is too broad. Please restrict the population size by setting at least one "
+                         "region constraint imposing the presence of one or more variants in a precise locus or genomic "
+                         "area.")
+
         females_and_males_stmt = \
             select([self.my_meta_t.c.gender, func.count(self.my_meta_t.c.item_id)]) \
             .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
             .group_by(self.my_meta_t.c.gender)
         gender_of_individuals = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
         if len(gender_of_individuals) == 0:
-            raise EmptyResult('KGenomes has no individuals matching the request parameters.')
+            raise EmptyResult('1000Genomes has no individuals matching the request parameters.')
         females = next((el[1] for el in gender_of_individuals if el[0] == 'female'), 0)
         males = next((el[1] for el in gender_of_individuals if el[0] == 'male'), 0)
         population_size = males + females

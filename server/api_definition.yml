@@ -257,7 +257,6 @@ paths:
               type: object
               required:
                 - having_meta
-                - having_variants
               properties:
                 source:
                   $ref: '#/components/schemas/GenomicSource'
@@ -340,7 +339,6 @@ paths:
               type: object
               required:
                 - having_meta
-                - having_variants
               properties:
                 source:
                   $ref: '#/components/schemas/GenomicSource'

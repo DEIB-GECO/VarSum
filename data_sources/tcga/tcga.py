@@ -162,9 +162,11 @@ class TCGA(Source):
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
 
-        females_and_males_stmt = \
-            select([self.my_meta_t.c.gender, func.count()]) \
-            .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
+        females_and_males_stmt = select([self.my_meta_t.c.gender, func.count()])
+        if self.my_region_t is not None:
+            females_and_males_stmt = females_and_males_stmt\
+                .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id])))
+        females_and_males_stmt = females_and_males_stmt \
             .group_by(self.my_meta_t.c.gender)
         gender_of_individuals = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
         if len(gender_of_individuals) == 0:
@@ -192,12 +194,13 @@ class TCGA(Source):
 
         # Actually, self.my_region_t already contains only the individuals compatible with meta_attrs, but it can contain
         # duplicated item_id. Since we want to join, it's better to remove them.
-        sample_set_with_limit = \
-            select([self.my_meta_t.c.item_id, self.my_meta_t.c.gender]) \
-            .where(self.my_meta_t.c.item_id.in_(
-                select([self.my_region_t.c.item_id])
-            )) \
-            .alias('sample_set')
+        sample_set_with_limit = select([self.my_meta_t.c.item_id, self.my_meta_t.c.gender])
+        if self.my_region_t is not None:
+            sample_set_with_limit = sample_set_with_limit \
+                .where(self.my_meta_t.c.item_id.in_(
+                    select([self.my_region_t.c.item_id])
+                ))
+        sample_set_with_limit = sample_set_with_limit.alias('sample_set')
 
         # compute occurrence and positive donors by gender, excluding weird chromosomes (e.g. chrGL000205)
         stmt = select([genomes_red.c.chrom,
