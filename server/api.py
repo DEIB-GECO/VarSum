@@ -20,6 +20,7 @@ class ReqParamKeys:
     POPULATION_CODE = 'population'
     SUPER_POPULATION_CODE = 'super_population'
     ETHNICITY = 'ethnicity'
+    DISEASE = 'disease'
 
     VARIANTS = 'having_variants'
     WITH_VARIANTS = 'with'
@@ -176,7 +177,8 @@ def prepare_body_parameters(body):
                              assembly=meta.get(ReqParamKeys.ASSEMBLY),
                              population=meta.get(ReqParamKeys.POPULATION_CODE),
                              super_population=meta.get(ReqParamKeys.SUPER_POPULATION_CODE),
-                             ethnicity=meta.get(ReqParamKeys.ETHNICITY))
+                             ethnicity=meta.get(ReqParamKeys.ETHNICITY),
+                             disease=meta.get(ReqParamKeys.DISEASE))
 
     variants = body.get(ReqParamKeys.VARIANTS) or \
                (body.get(ReqParamKeys.OF).get(ReqParamKeys.VARIANTS) if body.get(ReqParamKeys.OF) else None)
@@ -272,6 +274,8 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.GENE_TYPE
     elif name == ReqParamKeys.ETHNICITY:
         return Vocabulary.ETHNICITY
+    elif name == ReqParamKeys.DISEASE:
+        return Vocabulary.DISEASE
     else:
         logger.info('name without a match in Vocabulary')
         return None

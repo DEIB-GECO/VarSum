@@ -35,7 +35,7 @@ paths:
           style: simple
           schema:
             type: string
-            enum: [assembly, gender, population, super_population, dna_source, health_status, gene_type, ethnicity]
+            enum: [assembly, gender, population, super_population, dna_source, health_status, gene_type, ethnicity, disease]
       responses:
         '200':
           description: >-
@@ -612,6 +612,8 @@ components:
           items:
             type: string
         health_status:
+          type: string
+        disease:
           type: string
       required:
         - assembly

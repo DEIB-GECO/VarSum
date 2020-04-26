@@ -31,7 +31,12 @@ class TCGA(Source):
         Vocabulary.ETHNICITY: 'ethnicity',
         Vocabulary.HEALTH_STATUS: 'health_status',
         Vocabulary.ASSEMBLY: 'assembly',
-        Vocabulary.DONOR_ID: 'donor_source_id'
+        Vocabulary.DONOR_ID: 'donor_source_id',
+        Vocabulary.DISEASE: 'disease'   # actually this column doesn't exists in metadata table, but that's no issue since
+                                        # disease isn't allowed in the distribute by list.
+                                        # this structure was thought before some changes in requirement that now could
+                                        # make this approach limiting.
+                                        # TODO remove mappings and leave a set of Vocabulary in place, with the same purpose. Then mappings are handled internally by each module
     }
     # REGION CONSTRAINTS THAT CAN BE EXPRESSED WITH THIS SOURCE (REQUIRED BY SOURCE)
     avail_region_constraints = {
@@ -287,6 +292,25 @@ class TCGA(Source):
         #     utils.show_stmt(self.connection, stmt, 'DISTINCT VALUES OF {}'.format(attribute))
         # return self.connection.execute(stmt)
 
+        if attribute == Vocabulary.DISEASE:
+            stmt = text("select distinct lower(disease) "
+                        "from public.biosample b join ( "
+                        "   select donor_id "
+                        "   from dw.genomes_metadata gm join ( "
+                        "       select distinct it.item_id as item_id "
+                        "       from public.item it "
+                        "       where dataset_id in ( "
+                        "           select dataset_id "
+                        "           from public.dataset "
+                        "           where dataset_name ilike '%TCGA_dnaseq%' "
+                        "           or dataset_name ilike '%TCGA_somatic_mutation_masked%' ) "
+                        "       ) as items_of_dataset "
+                        "       on items_of_dataset.item_id = gm.item_id ) as donors_of_dataset "
+                        "on b.donor_id = donors_of_dataset.donor_id ")
+            result_proxy = database.try_stmt(stmt, None, None).fetchall()
+            return 'TCGA', [row.values()[0] for row in result_proxy]
+
+
         # HARDCODED
         # since an attribute can also be mut_type which is not indexed, answering takes forever. This is an easy solution
         # considered that the underlying data is updated rarely, we don't need an index on mut_type.
@@ -317,7 +341,7 @@ class TCGA(Source):
             self.meta_col_map[Vocabulary.HEALTH_STATUS]: [
                 'false'
             ],
-            'mut_type': ['SNP', 'DEL', 'INS', 'DNP', 'TNP']
+            'mut_type': ['SNP', 'DEL', 'INS', 'DNP', 'TNP'],
         }
         return 'TCGA', distinct_values.get(self.meta_col_map.get(attribute))
 
@@ -423,6 +447,12 @@ class TCGA(Source):
             query = query.where(metadata.c.assembly == self.meta_attrs.assembly)
         if self.meta_attrs.ethnicity:
             query = query.where(metadata.c.ethnicity.in_(self.meta_attrs.ethnicity))
+        if self.meta_attrs.disease:
+            query = query.where(metadata.c.donor_id.in_(
+                text("select distinct donor_id from "
+                     "public.biosample "
+                     f"where lower(disease) = '{self.meta_attrs.disease}'")
+            ))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
         utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, self.logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)

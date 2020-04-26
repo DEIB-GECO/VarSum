@@ -127,7 +127,8 @@ class MetadataAttrs:
                  assembly: str = None,
                  population: Optional[list] = None,
                  super_population: Optional[list] = None,
-                 ethnicity: Optional[list] = None):
+                 ethnicity: Optional[list] = None,
+                 disease: Optional[str] = None):
         self.free_dimensions = []
         self.constrained_dimensions = []
 
@@ -181,6 +182,13 @@ class MetadataAttrs:
             self.population, self.super_population, self.ethnicity = None, None, None
             self.free_dimensions.extend([Vocabulary.POPULATION, Vocabulary.SUPER_POPULATION, Vocabulary.ETHNICITY])
 
+        if disease:
+            self.disease = disease.lower()
+            self.constrained_dimensions.append(Vocabulary.DISEASE)
+        else:
+            self.disease = None
+            self.free_dimensions.append(Vocabulary.DISEASE)
+
 
 class Vocabulary(Enum):
     # dimensions of metadata kind
@@ -193,6 +201,7 @@ class Vocabulary(Enum):
     DOWNLOAD_URL = 7
     DONOR_ID = 8
     ETHNICITY = 9
+    DISEASE = 10
 
     # dimensions of region kind
     WITH_VARIANT = 101
