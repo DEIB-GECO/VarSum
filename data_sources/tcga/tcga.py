@@ -181,10 +181,11 @@ class TCGA(Source):
         other_genders = reduce(lambda x1, x2: x1+x2, [el[1] for el in gender_of_individuals]) - males - females
         self.logger.debug(f'TCGA: request /rank_variants_by_frequency for a population of {males+females+other_genders} individuals')
 
-        self.notify_message(
-            SourceMessage.Type.GENERAL_WARNING,
-            'Note for TCGA data: Individuals with an undefined gender have been excluded from the population while '
-            'calculating the frequency of variants in chromosomes 23 and 24')
+        if other_genders > 0:
+            self.notify_message(
+                SourceMessage.Type.GENERAL_WARNING,
+                'Note for TCGA data: Individuals with an undefined gender have been excluded from the population while '
+                'calculating the frequency of variants in chromosomes 23 and 24')
 
         # reduce size of the join with regions table
         genomes_red = select(
