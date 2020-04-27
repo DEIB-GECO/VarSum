@@ -392,7 +392,7 @@ paths:
                         type: string
               example:
                 columns: ['CHROM', 'START', 'REF', 'ALT', 'POPULATION_SIZE', 'POSITIVE_DONORS', 'OCCURRENCE_OF_VARIANT', 'FREQUENCY_OF_VARIANT']
-                rows: [[1,  76836,  'T',  'G',  22,  1,  1,  0.022727], [1,  77872,  'G',  'A',  22,  1,  1,  0.05987]]
+                rows: [[1,  76836,  'T',  'G',  22,  1,  1,  0.022727], [1,  77872,  'G',  'A',  22,  1,  2,  0.045454]]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
@@ -434,8 +434,8 @@ paths:
                   alt: "C"
               Annotate variant having id:
                 value:
-                  assembly: hg19
-                  id: rs568927205
+                  assembly: grch38
+                  id: rs121913500
               Annotate genomic interval:
                 value:
                   assembly: hg19
@@ -551,6 +551,7 @@ paths:
 components:
   schemas:
     VariantID:
+      description: dbSNP variant ID
       type: object
       properties:
         id:
@@ -559,6 +560,7 @@ components:
         - id
 
     VariantCoordinates:
+      description: 0-based variant coordinates
       type: object
       properties:
         chrom:
@@ -581,6 +583,7 @@ components:
         - $ref: '#/components/schemas/VariantCoordinates'
 
     FilterMetadata:
+      description: Attributes of the selected population
       type: object
       properties:
         gender:
@@ -619,6 +622,7 @@ components:
         - assembly
 
     FilterVariants:
+      description: Constraints on the genomic regions owned by the individuals in the population
       type: object
       minProperties: 1
       properties:
