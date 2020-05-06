@@ -16,7 +16,7 @@ info:
       ## How to
       - [(video) Exploring the documentation ](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ESEAJhaYj-FHh3AfcVYkp0wBDcI7djdLQm_twsIdjSpdTw?e=qMKfkY)
       - [(video) Try the API by yourself](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ETN9_W7Z9xtMpg4l0UwfzTwBcDKvFkJ1eUKxGOcEvQGzIw?e=R9YFnZ)
-  version: 0.3.0
+  version: 1.3.0
 servers:
   - url: /popstudy/api/
 paths:
@@ -659,7 +659,7 @@ components:
       type: array
       items:
         type: string
-        enum: [gender, population, super_population, dna_source, health_status, ethnicity]
+        enum: [gender, population, super_population, dna_source, health_status, ethnicity, disease]
 
     GenomicInterval:
       type: object

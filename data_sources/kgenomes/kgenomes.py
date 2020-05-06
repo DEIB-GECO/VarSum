@@ -10,7 +10,7 @@ from threading import RLock
 from loguru import logger
 
 # SOURCE TABLE PARAMETERS
-default_metadata_table_name = 'genomes_metadata_2'
+default_metadata_table_name = 'genomes_metadata_3'
 default_metadata_schema_name = 'dw'
 default_region_table_name = 'kgenomes_red'
 default_region_schema_name = 'rr'
@@ -34,7 +34,8 @@ class KGenomes(Source):
         Vocabulary.HEALTH_STATUS: 'health_status',
         Vocabulary.ASSEMBLY: 'assembly',
         Vocabulary.ETHNICITY: 'ethnicity',
-        Vocabulary.DONOR_ID: 'donor_source_id'
+        Vocabulary.DONOR_ID: 'donor_source_id',
+        Vocabulary.DISEASE: 'disease'
     }
     # REGION CONSTRAINTS THAT CAN BE EXPRESSED WITH THIS SOURCE (REQUIRED BY SOURCE)
     avail_region_constraints = {
@@ -309,6 +310,9 @@ class KGenomes(Source):
             self.meta_col_map[Vocabulary.HEALTH_STATUS]: [
                 'true'
             ],
+            self.meta_col_map[Vocabulary.DISEASE]: [
+                'none'
+            ],
             'mut_type': ['SNP', 'DEL', 'INS', 'CNV', 'MNP', 'SVA', 'ALU', 'LINE1']
         }
         return '1000Genomes', distinct_values.get(self.meta_col_map.get(attribute))
@@ -401,6 +405,7 @@ class KGenomes(Source):
             temp_set = set(select_columns)
             temp_set.add('item_id')
             columns_in_select = [metadata.c[col_name] for col_name in temp_set]
+        # select item_ids of 1000 Genomes
         # noinspection SpellCheckingInspection
         query = select(columns_in_select).where(metadata.c.item_id.in_(
             text("select item_id from public.item where dataset_id in ( "
@@ -412,6 +417,8 @@ class KGenomes(Source):
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
         if self.meta_attrs.health_status:
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
+        if self.meta_attrs.disease:
+            query = query.where(metadata.c.disease == self.meta_attrs.disease)
         if self.meta_attrs.dna_source:
             query = query.where(metadata.c.dna_source.in_(self.meta_attrs.dna_source))
         if self.meta_attrs.assembly:

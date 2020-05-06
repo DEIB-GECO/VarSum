@@ -10,7 +10,7 @@ from threading import RLock
 from loguru import logger
 
 # SOURCE TABLE PARAMETERS
-default_metadata_table_name = 'genomes_metadata_2'
+default_metadata_table_name = 'genomes_metadata_3'
 default_metadata_schema_name = 'dw'
 default_region_table_name = 'tcga_dnaseq'
 default_region_schema_name = 'rr'
@@ -30,13 +30,9 @@ class TCGA(Source):
         Vocabulary.GENDER: 'gender',
         Vocabulary.ETHNICITY: 'ethnicity',
         Vocabulary.HEALTH_STATUS: 'health_status',
+        Vocabulary.DISEASE: 'disease',
         Vocabulary.ASSEMBLY: 'assembly',
-        Vocabulary.DONOR_ID: 'donor_source_id',
-        Vocabulary.DISEASE: 'disease'   # actually this column doesn't exists in metadata table, but that's no issue since
-                                        # disease isn't allowed in the distribute by list.
-                                        # this structure was thought before some changes in requirement that now could
-                                        # make this approach limiting.
-                                        # TODO remove mappings and leave a set of Vocabulary in place, with the same purpose. Then mappings are handled internally by each module
+        Vocabulary.DONOR_ID: 'donor_source_id'
     }
     # REGION CONSTRAINTS THAT CAN BE EXPRESSED WITH THIS SOURCE (REQUIRED BY SOURCE)
     avail_region_constraints = {
@@ -294,23 +290,17 @@ class TCGA(Source):
         # return self.connection.execute(stmt)
 
         if attribute == Vocabulary.DISEASE:
-            stmt = text("select distinct lower(disease) "
-                        "from public.biosample b join ( "
-                        "   select donor_id "
-                        "   from dw.genomes_metadata gm join ( "
-                        "       select distinct it.item_id as item_id "
-                        "       from public.item it "
-                        "       where dataset_id in ( "
-                        "           select dataset_id "
-                        "           from public.dataset "
-                        "           where dataset_name ilike '%TCGA_dnaseq%' "
-                        "           or dataset_name ilike '%TCGA_somatic_mutation_masked%' ) "
-                        "       ) as items_of_dataset "
-                        "       on items_of_dataset.item_id = gm.item_id ) as donors_of_dataset "
-                        "on b.donor_id = donors_of_dataset.donor_id ")
+            stmt = select([metadata.c.disease]).distinct() \
+                .where(metadata.c.item_id.in_(
+                    # select item_ids of TCGA
+                    text("  select item_id from public.item where dataset_id in ( "
+                         "      select dataset_id from public.dataset "
+                         "      where dataset_name ilike '%TCGA_dnaseq%' "
+                         "      or dataset_name ilike '%TCGA_somatic_mutation_masked%' "
+                         "      )")
+                ))
             result_proxy = database.try_stmt(stmt, None, None).fetchall()
             return 'TCGA', [row.values()[0] for row in result_proxy]
-
 
         # HARDCODED
         # since an attribute can also be mut_type which is not indexed, answering takes forever. This is an easy solution
@@ -434,6 +424,7 @@ class TCGA(Source):
             temp_set = set(select_columns)
             temp_set.add('item_id')
             columns_in_select = [metadata.c[col_name] for col_name in temp_set]
+        # select item_ids of TCGA
         query = select(columns_in_select).where(metadata.c.item_id.in_(
             text("select item_id from public.item where dataset_id in ( "
                  "select dataset_id from public.dataset "
@@ -444,16 +435,12 @@ class TCGA(Source):
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
         if self.meta_attrs.health_status:
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
+        if self.meta_attrs.disease:
+            query = query.where(metadata.c.disease == self.meta_attrs.disease)
         if self.meta_attrs.assembly:
             query = query.where(metadata.c.assembly == self.meta_attrs.assembly)
         if self.meta_attrs.ethnicity:
             query = query.where(metadata.c.ethnicity.in_(self.meta_attrs.ethnicity))
-        if self.meta_attrs.disease:
-            query = query.where(metadata.c.donor_id.in_(
-                text("select distinct donor_id from "
-                     "public.biosample "
-                     f"where lower(disease) = '{self.meta_attrs.disease}'")
-            ))
         new_meta_table_name = utils.random_t_name_w_prefix('meta')
         utils.create_table_as(new_meta_table_name, query, default_schema_to_use_name, self.connection, self.log_sql_commands, self.logger.debug)
         # t_stmt = utils.stmt_create_table_as(new_meta_table_name, query,  default_schema_to_use_name)
