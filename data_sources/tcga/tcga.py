@@ -12,7 +12,7 @@ from loguru import logger
 # SOURCE TABLE PARAMETERS
 default_metadata_table_name = 'genomes_metadata_3'
 default_metadata_schema_name = 'dw'
-default_region_table_name = 'tcga_dnaseq'
+default_region_table_name = 'tcga_dnaseq_2'
 default_region_schema_name = 'rr'
 default_schema_to_use_name = 'temp'
 db_meta: Optional[MetaData] = None
@@ -204,7 +204,6 @@ class TCGA(Source):
                 ))
         sample_set_with_limit = sample_set_with_limit.alias('sample_set')
 
-        # compute occurrence and positive donors by gender, excluding weird chromosomes (e.g. chrGL000205)
         stmt = select([genomes_red.c.chrom,
                        genomes_red.c.start,
                        genomes_red.c.ref,
@@ -215,7 +214,6 @@ class TCGA(Source):
             .select_from(genomes_red.join(
                 sample_set_with_limit,
                 genomes_red.c.item_id == sample_set_with_limit.c.item_id)) \
-            .where(genomes_red.c.chrom < str(26)) \
             .group_by(genomes_red.c.chrom, genomes_red.c.start, genomes_red.c.ref, genomes_red.c.alt, sample_set_with_limit.c.gender) \
             .alias('stmt_1')
 
@@ -224,24 +222,24 @@ class TCGA(Source):
             select([stmt.c.chrom, stmt.c.start, stmt.c.ref, stmt.c.alt] +
                    [
                        case([
-                           ((stmt.c.chrom < str(23)) | (stmt.c.chrom > str(24)), males+other_genders)
+                           ((stmt.c.chrom < 23) | (stmt.c.chrom > 24), males+other_genders)
                             ], else_=males).label('males'),
                        cast(func.sum(column('positives_by_gender')), types.INTEGER).label('positives'),
                        cast(func.sum(column('occurrence_by_gender')), types.INTEGER).label('occurrence')
                    ]
                    ) \
-            .where((stmt.c.gender.in_(['male', 'female'])) | (stmt.c.chrom < str(23)) | (stmt.c.chrom > str(24))) \
+            .where((stmt.c.gender.in_(['male', 'female'])) | (stmt.c.chrom < 23) | (stmt.c.chrom > 24)) \
             .group_by(stmt.c.chrom, stmt.c.start, stmt.c.ref, stmt.c.alt) \
             .alias('stmt_2')
 
         # other custom function
         if meta_attrs.assembly == 'hg19':
             func_frequency_new = func.rr.mut_frequency_new_hg19(column('occurrence'), column('males'), females,
-                                                                cast(outer_stmt.c.chrom, types.INTEGER),
+                                                                outer_stmt.c.chrom,
                                                                 outer_stmt.c.start)
         else:
             func_frequency_new = func.rr.mut_frequency_new_grch38(column('occurrence'), column('males'), females,
-                                                                  cast(outer_stmt.c.chrom, types.INTEGER),
+                                                                  outer_stmt.c.chrom,
                                                                   outer_stmt.c.start)
         func_frequency_new = func_frequency_new.label(Vocabulary.FREQUENCY.name)
 
@@ -405,7 +403,7 @@ class TCGA(Source):
         if len(mutations_without_id) > 0:
             second_select = select_expression.where(
                 tuple_(from_table.c.start, from_table.c.ref, from_table.c.alt, from_table.c.chrom).in_(
-                    [(mut.start, mut.ref, mut.alt, str(mut.chrom)) for mut in mutations_without_id]
+                    [(mut.start, mut.ref, mut.alt, mut.chrom) for mut in mutations_without_id]
                 ))
             if only_item_id_in_table is not None:
                 second_select = second_select.where(from_table.c.item_id.in_(select([only_item_id_in_table.c.item_id])))
@@ -538,7 +536,7 @@ class TCGA(Source):
         columns = [regions.c[c_name] for c_name in select_columns] if select_columns is not None else [regions]
         stmt_as = select(columns)
         if self.region_attrs.with_variants_in_reg is not None:
-            stmt_as = stmt_as.where((regions.c.chrom == str(self.region_attrs.with_variants_in_reg.chrom)) &
+            stmt_as = stmt_as.where((regions.c.chrom == self.region_attrs.with_variants_in_reg.chrom) &
                                     (regions.c.start >= self.region_attrs.with_variants_in_reg.start) &
                                     (regions.c.start <= self.region_attrs.with_variants_in_reg.stop))
         if self.region_attrs.with_variants_of_type is not None:
@@ -571,16 +569,13 @@ class TCGA(Source):
 
         select_columns = list()
         for att in output_region_attrs:
-            if att == Vocabulary.CHROM:
-                select_columns.append(cast(regions.c.chrom, types.SmallInteger).label(att.name))
-            else:
-                select_columns.append(regions.c[self.region_col_map[att]].label(att.name))
+            select_columns.append(regions.c[self.region_col_map[att]].label(att.name))
         stmt =\
             select(select_columns).distinct() \
             .select_from(regions.join(only_from_samples, only_from_samples.c.item_id == regions.c.item_id)) \
             .where((regions.c.start >= genomic_interval.start) &
                    (regions.c.start <= genomic_interval.stop) &
-                   (regions.c.chrom == str(genomic_interval.chrom)))
+                   (regions.c.chrom == genomic_interval.chrom))
 
         if self.log_sql_commands:
             utils.show_stmt(connection, stmt, self.logger.debug, f'TCGA: VARIANTS IN REGION '
@@ -640,7 +635,7 @@ class TCGA(Source):
 
         stmt = select(select_columns).distinct()
         if variant.chrom is not None:
-            stmt = stmt.where((regions.c.chrom == str(variant.chrom)) &
+            stmt = stmt.where((regions.c.chrom == variant.chrom) &
                               (regions.c.start == variant.start) &
                               (regions.c.ref == variant.ref) &
                               (regions.c.alt == variant.alt))
