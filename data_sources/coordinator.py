@@ -164,7 +164,7 @@ class Coordinator:
             raise NoDataFromSources(self.notices)
         else:
             all_sources = union(*from_sources).alias('all_sources')
-            chrom = int(region_of_variant[0])
+            chrom = region_of_variant[0]
             start = region_of_variant[1]
 
             # functions
