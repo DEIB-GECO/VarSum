@@ -109,8 +109,8 @@ class Coordinator:
                 rows = result['rows']
                 for row in rows:
                     # here "row" is the string concatenation of all the sample urls in this group
-                    row[-1] = row[-1].replace("www.gmql.eu", "genomic.deib.polimi.it")
-                    row[-1] = row[-1].replace('.gdm', '')
+                    if row[-1] is not None:
+                        row[-1] = row[-1].replace("www.gmql.eu", "genomic.deib.polimi.it")
             return result
 
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
@@ -539,6 +539,7 @@ class Coordinator:
         return result
 
     def source_message_handler(self, msg_type: SourceMessage.Type, msg: str):
+        self.logger.info(f'SourceMessage: TYPE: {msg_type.name}. CONTENT: {msg}')
         if msg_type == SourceMessage.Type.TIME_TO_FINISH:
             self.observer_callback(msg)
         else:

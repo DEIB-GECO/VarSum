@@ -23,7 +23,8 @@ class Source:
     # the above structure was thought before some changes in requirement that now could
     # make this approach limiting. For example it could happen that some interesting
     # attributes aren't in metadata table and consequently they don't hava a mapped column name.
-    # TODO separate attributes from mappings. Leave a set of Vocabulary in place, with the same purpose. Then mappings are handled internally by each module
+    # TODO separate attributes from mappings. Leave a set of Vocabulary in place, with the same purpose.
+    #  Then mappings can then be handled internally by each module
 
     avail_region_constraints: set = set()
 
