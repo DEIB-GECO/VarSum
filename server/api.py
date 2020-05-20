@@ -28,6 +28,7 @@ class ReqParamKeys:
     WITH_VARS_ON_DIFF_CHROM_COPY = 'on_diff_chrom_copy'
     WITH_VARS_IN = 'in'
     WITH_VARS_IN_CELL_TYPE = 'in_cell_type'
+    WITHOUT_VARIANT = 'without'
 
     OUTPUT = 'filter_output'
     OUT_MIN_FREQUENCY = 'min_frequency'
@@ -198,7 +199,8 @@ def prepare_body_parameters(body):
                                parse_to_mutation_array(variants.get(ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY)),
                                interval,
                                gene,
-                               variants.get(ReqParamKeys.WITH_VARS_IN_CELL_TYPE))
+                               variants.get(ReqParamKeys.WITH_VARS_IN_CELL_TYPE),
+                               parse_to_mutation_array(variants.get(ReqParamKeys.WITHOUT_VARIANT)))
 
     by_attributes_usr_input = body.get(ReqParamKeys.BY_ATTRIBUTES)
     by_attributes = [parse_name_to_vocabulary(att) for att in by_attributes_usr_input] if by_attributes_usr_input else None
@@ -304,6 +306,8 @@ def try_and_catch(function, request_logger, *args, **kwargs):
         return bad_variant_parameters(e.args[0], request_logger)
     except GenomicIntervalUndefined as e:
         return bad_genomic_interval_parameters(e.args[0], request_logger)
+    except ContradictingRegionAttributes as e:
+        return contradicting_region_attributes(request_logger)
     except AskUserIntervention as e:
         request_logger.info(f'Asking for user intervention with response {e.proposed_status_code}')
         return e.response_body, e.proposed_status_code
@@ -335,6 +339,13 @@ def bad_variant_parameters(msg: str, log_with):
     log_with.info('responded with bad_variant_parameters')
     return 'One or more variants included in the request miss required attributes or contain misspells. ' \
            f'Detailed message: {msg}', 400, {'x-error': 'Cannot answer to this request'}
+
+
+def contradicting_region_attributes(log_with):
+    log_with.info('responded with contradicting_region_attributes')
+    return f'One or more variants included in the request appear both in {ReqParamKeys.WITHOUT_VARIANT} clause ' \
+           f'and in one of the clauses {ReqParamKeys.WITH_VARIANTS}, {ReqParamKeys.WITH_VARS_ON_SAME_CHROM_COPY} or ' \
+           f'{ReqParamKeys.WITH_VARS_ON_DIFF_CHROM_COPY}. That is a contradiction.', 400, {'x-error': 'Cannot answer to this request'}
 
 
 def bad_genomic_interval_parameters(msg: str, log_with):

@@ -75,25 +75,30 @@ class RegionAttrs:
                  with_variants_diff_c_copy: Optional[list] = None,
                  with_variants_in_genomic_region: Optional[GenomicInterval] = None,
                  with_variants_in_gene: Optional[Gene] = None,
-                 in_cell_type: Optional[list] = None
+                 in_cell_type: Optional[list] = None,
+                 without_variants: Optional[list] = None
                  ):
         self.requires = set()
+        variants_to_include = set()     # this is used to verify possible contradictions in the input parameters
 
         if with_variants:
             self.with_variants = with_variants
             self.requires.add(Vocabulary.WITH_VARIANT)
+            variants_to_include.update([str(var) for var in with_variants])
         else:
             self.with_variants = None
 
         if with_variants_same_c_copy:
             self.with_variants_same_c_copy = with_variants_same_c_copy
             self.requires.add(Vocabulary.WITH_VARIANT_SAME_C_COPY)
+            variants_to_include.update([str(var) for var in with_variants_same_c_copy])
         else:
             self.with_variants_same_c_copy = None
 
         if with_variants_diff_c_copy:
             self.with_variants_diff_c_copy = with_variants_diff_c_copy
             self.requires.add(Vocabulary.WITH_VARIANT_DIFF_C_COPY)
+            variants_to_include.update([str(var) for var in with_variants_diff_c_copy])
         else:
             self.with_variants_diff_c_copy = None
 
@@ -115,7 +120,19 @@ class RegionAttrs:
             if 'somatic' in in_cell_type:
                 self.requires.add(Vocabulary.WITH_VARIANTS_IN_SOMATIC_CELLS)
 
+        if without_variants:
+            self.without_variants = without_variants
+            self.requires.add(Vocabulary.WITHOUT_VARIANT)
+            if len(variants_to_include.intersection(set([str(var) for var in without_variants]))) > 0:
+                raise ContradictingRegionAttributes
+        else:
+            self.without_variants = None
+
         self.with_variants_of_type: Optional[list] = None
+
+
+class ContradictingRegionAttributes(Exception):
+    pass
 
 
 class MetadataAttrs:
@@ -210,6 +227,7 @@ class Vocabulary(Enum):
     WITH_VARIANT_IN_GENOMIC_INTERVAL = 104
     WITH_VARIANTS_IN_GERMLINE_CELLS = 105
     WITH_VARIANTS_IN_SOMATIC_CELLS = 106
+    WITHOUT_VARIANT = 107
     # TODO extend with region intervals and type
 
     # measures
@@ -258,8 +276,13 @@ class Notice(Exception):
 
 
 class EmptyResult(Exception):
-    def __init__(self, *args):
+    """
+    This exception allows a source to terminate early. It produces no effect on the output and it is considered a normal
+    condition. To signal an issue use instead SourceMessage, Notice or other exceptions.
+    """
+    def __init__(self, source_name: str, *args):
         super().__init__(*args)
+        self.source_name = source_name
 
 
 class SourceMessage:

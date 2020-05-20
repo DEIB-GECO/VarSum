@@ -320,4 +320,19 @@ with_annotations = [
 
 # print(Coordinator(logger).values_of_attribute(Vocabulary.HEALTH_STATUS))
 
+# result = Coordinator(logger).donor_distribution(
+#     by_attributes=[Vocabulary.GENDER],
+#     meta_attrs=MetadataAttrs(
+#          health_status="true",
+#          assembly="hg19",
+#          population=['BEB']
+#     ),
+#     region_attrs=RegionAttrs(
+#          without_variants=[
+#              Mutation(_id='rs367896724')
+#          ]
+#      ),
+#     with_download_url=False)
+# print_output_table(result)
+
 

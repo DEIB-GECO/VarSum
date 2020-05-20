@@ -632,6 +632,12 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/Variant'
+        without:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Variant'
         on_same_chrom_copy:
           type: array
           minItems: 2

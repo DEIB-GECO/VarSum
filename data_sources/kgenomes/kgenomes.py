@@ -1,7 +1,7 @@
 from ..source_interface import *
 from ..io_parameters import *
 from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types, text
-from sqlalchemy.sql.expression import Selectable
+from sqlalchemy.sql.expression import Selectable, except_
 from sqlalchemy.engine import Connection
 from functools import reduce
 import database.db_utils as utils
@@ -43,7 +43,8 @@ class KGenomes(Source):
         Vocabulary.WITH_VARIANT_SAME_C_COPY,
         Vocabulary.WITH_VARIANT_DIFF_C_COPY,
         Vocabulary.WITH_VARIANT_IN_GENOMIC_INTERVAL,
-        Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS
+        Vocabulary.WITH_VARIANTS_IN_GERMLINE_CELLS,
+        Vocabulary.WITHOUT_VARIANT
     }
     region_col_map = {
         Vocabulary.CHROM: 'chrom',
@@ -165,7 +166,7 @@ class KGenomes(Source):
             .group_by(self.my_meta_t.c.gender)
         gender_of_individuals = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
         if len(gender_of_individuals) == 0:
-            raise EmptyResult('1000Genomes has no individuals matching the request parameters.')
+            raise EmptyResult('1000Genomes')
         females = next((el[1] for el in gender_of_individuals if el[0] == 'female'), 0)
         males = next((el[1] for el in gender_of_individuals if el[0] == 'male'), 0)
         population_size = males + females
@@ -416,8 +417,12 @@ class KGenomes(Source):
         if self.meta_attrs.gender:
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
         if self.meta_attrs.health_status:
+            if self.meta_attrs.health_status == "false":
+                raise EmptyResult('1000Genomes')
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
         if self.meta_attrs.disease:
+            if self.meta_attrs.disease != "none":
+                raise EmptyResult('1000Genomes')
             query = query.where(metadata.c.disease == self.meta_attrs.disease)
         if self.meta_attrs.dna_source:
             query = query.where(metadata.c.dna_source.in_(self.meta_attrs.dna_source))
@@ -452,6 +457,9 @@ class KGenomes(Source):
                 to_combine_t.append(t)
             if self.region_attrs.with_variants_in_reg:
                 t = self.view_of_variants_in_interval_or_type(select_columns)
+                to_combine_t.append(t)
+            if self.region_attrs.without_variants:
+                t = self._table_without_any_of_mutations()
                 to_combine_t.append(t)
             if len(to_combine_t) == 0:
                 self.my_region_t = None
@@ -501,7 +509,8 @@ class KGenomes(Source):
             return Table(target_t_name, db_meta, autoload=True, autoload_with=self.connection, schema=default_schema_to_use_name)
 
     def _table_with_any_of_mutations(self, select_columns, only_item_id_in_table: Optional[Table], *mutations: Mutation):
-        """Returns a Table containing all the rows from the table genomes containing one of the variants in
+        """
+        Returns a Table containing all the rows from the table genomes containing one of the variants in
         the argument mutations.
         :param select_columns selects only the column names in this collection. If None, selects all the columns from genomes.
         :param only_item_id_in_table If None, the variants that are not owned by any of the individuals in this table
@@ -525,6 +534,33 @@ class KGenomes(Source):
         self.connection.execute(stmt_create_table)
         return Table(t_name, db_meta, autoload=True, autoload_with=self.connection,
                      schema=default_schema_to_use_name)
+
+    def _table_without_any_of_mutations(self):
+        """
+        Returns a Table containing the item_id from the table genomes that do not match the given mutations.
+        :param select_columns selects only the column names in this collection. If None, selects all the columns from genomes.
+        """
+        mutations = self.region_attrs.without_variants
+        if len(mutations) == 0:
+            raise ValueError('function argument *mutations cannot be empty')
+        else:
+            # create table for the result
+            t_name = utils.random_t_name_w_prefix('without_any_of_mut')
+            query_mutations = self._stmt_where_region_is_any_of_mutations(*mutations,
+                                                                          from_table=genomes,
+                                                                          select_expression=select([genomes.c.item_id]),
+                                                                          only_item_id_in_table=self.my_meta_t)
+            stmt_as = except_(
+                select([self.my_meta_t.c.item_id]),
+                query_mutations
+            )
+            stmt_create_table = utils.stmt_create_table_as(t_name, stmt_as, default_schema_to_use_name)
+            if self.log_sql_commands:
+                utils.show_stmt(self.connection, stmt_create_table, self.logger.debug,
+                                'CREATE TABLE WITHOUT ANY OF THE {} MUTATIONS'.format(len(mutations)))
+            self.connection.execute(stmt_create_table)
+            return Table(t_name, db_meta, autoload=True, autoload_with=self.connection,
+                         schema=default_schema_to_use_name)
 
     def table_with_variants_same_c_copy(self, select_columns: Optional[list]):
         """

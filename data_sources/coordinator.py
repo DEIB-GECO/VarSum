@@ -510,11 +510,10 @@ class Coordinator:
         except EmptyResult as empty_res:
             try:
                 self.logger.debug(f'A source returned prematurely with empty result: '
-                                  f'{empty_res.args[0]}')
-                self.notices.append(Notice(empty_res.args[0]))
+                                  f'{empty_res.source_name}')
             except IndexError:
                 self.logger.error('a source returned prematurely with empty result. Forget to pass the name of the '
-                                  'source into the exception EmptyResult')
+                                  'source into EmptyResult')
             finally:
                 return alternative_return_value
         except Notice as notice:
