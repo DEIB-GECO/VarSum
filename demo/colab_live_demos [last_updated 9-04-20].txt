@@ -7,3 +7,7 @@ variant_distribution.iypnb https://colab.research.google.com/drive/1l0ux51MceYTS
 rarest_variants.iypnb https://colab.research.google.com/drive/1v5ZFDh1KyHjs9ItN-zr4jOTNbhyHVrDK
 
 differential analysis to unveil genes involved in tumor development https://colab.research.google.com/drive/1o2OhgTnHPWvx0w4Tnae-kwFAQn8YAXfX?usp=sharing
+
+exploring the link between stress-related disorders and tumor pathologies https://colab.research.google.com/drive/1eqGmFMKTquOcOXG5K23WSiYSWKT2ZPYg?usp=sharing
+
+finding correlated mutations in cancer development https://colab.research.google.com/drive/1KAsXobPrYYHGny3pmFeLdjCBPXY_kEZO?usp=sharing
