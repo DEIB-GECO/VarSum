@@ -10,7 +10,7 @@ info:
 
 
       ## Additional Resources
-      - [List of the abbreviations used in the data sources](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
+      - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
       - [Python Notebooks demo](https://github.com/tomalf2/data_summarization_1KGP/tree/master/demo)
       - [GitHub project repository](https://github.com/tomalf2/data_summarization_1KGP#data_summarization_1kgp)
       ## How to
@@ -210,6 +210,17 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
+            
+              The result lists a column for each attribute passed in the distribute_by parameter, follwed by:
+              - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
+              - POSITIVE_DONORS: number of donors owning the target variant.
+              - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
+              - FREQUENCY: frequence of the target variant in the considered population computed as
+              
+                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_ 
+                
+                where _total alleles_ matches _2 * POPULATION_SIZE_ in autosomal chromosomes and pseudo-autosomal regions, _2 * females + males_ if the target variant is located on chromosome X (23), _males_ if the target variant is located on chromosome Y (24) and _males + females_ if the target variant is located on mitochondrial chromosome (25). Donors with unkown gender are automatically removed from the population when this information is required (this and other edge cases are signaled in the response data).
+              
 
               Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
@@ -291,6 +302,17 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the size of the population considered, the number of individuals owning the variant, the occurrence and the frequency. The second item ("rows") is an array where each element is itself an array representing the values making a row of the table.
+            
+            
+            About the columns meaning:
+              - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
+              - POSITIVE_DONORS: number of donors owning the target variant.
+              - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
+              - FREQUENCY: frequence of the target variant in the considered population computed as
+              
+                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_ 
+              
+                where _total alleles_ matches _2 * POPULATION_SIZE_ in autosomal chromosomes and pseudo-autosomal regions, _2 * females + males_ if the target variant is located on chromosome X (23), _males_ if the target variant is located on chromosome Y (24) and _males + females_ if the target variant is located on mitochondrial chromosome (25). Donors with unkown gender are automatically removed from the population when this information is required (this and other edge cases are signaled in the response data).
 
               Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
@@ -373,6 +395,16 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the size of the population considered, the number of individuals owning the variant, the occurrence and the frequency. The second item ("rows") is an array where each element is itself an array representing the values making a row of the table.
+            
+              About the columns meaning:
+              - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
+              - POSITIVE_DONORS: number of donors owning the target variant.
+              - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
+              - FREQUENCY: frequence of the target variant in the considered population computed as
+              
+                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_ 
+              
+               where _total alleles_ matches _2 * POPULATION_SIZE_ in autosomal chromosomes and pseudo-autosomal regions, _2 * females + males_ if the target variant is located on chromosome X (23), _males_ if the target variant is located on chromosome Y (24) and _males + females_ if the target variant is located on mitochondrial chromosome (25). Donors with unkown gender are automatically removed from the population when this information is required (this and other edge cases are signaled in the response data).
 
               Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
