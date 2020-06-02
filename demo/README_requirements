@@ -5,4 +5,5 @@ jupyter
 notebook
 seaborn
 csv
+tqdm
 numpy
