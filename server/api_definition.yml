@@ -68,13 +68,13 @@ paths:
           description: Internal server error.
 
 
-  /donor_distribution:
+  /donor_grouping:
     post:
-      operationId: server.api.donor_distribution
+      operationId: server.api.donor_grouping
       summary: >
         Returns the distribution of the individuals inside a population having the requested characteristics.
       description: >
-        Given a set of characteristics (parameters "having_meta" and "having_variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "distribute_by".
+        Given a set of characteristics (parameters "having_meta" and "having_variants"), this method returns the number of the individuals having that features, distributed by the attributes given in "group_by".
       requestBody:
         required: true
         content:
@@ -83,12 +83,12 @@ paths:
               type: object
               required:
                 - having_meta
-                - distribute_by
+                - group_by
               properties:
                 source:
                   $ref: '#/components/schemas/GenomicSource'
-                distribute_by:
-                  $ref: '#/components/schemas/DistributeBy'
+                group_by:
+                  $ref: '#/components/schemas/GroupBy'
                 donors_download_url:
                   type: boolean
                 having_meta:
@@ -98,7 +98,7 @@ paths:
             examples:
               East Asian with variant rs367896724 by gender:
                 value:
-                  distribute_by: [gender]
+                  group_by: [gender]
                   having_meta:
                     assembly: hg19
                     super_population: [EAS]
@@ -107,7 +107,7 @@ paths:
                     with: [id: rs367896724]
               Europeans with any variant in gene DDX11L1 by population:
                 value:
-                  distribute_by: [population]
+                  group_by: [population]
                   having_meta:
                     assembly: hg19
                     super_population: [EUR]
@@ -150,13 +150,13 @@ paths:
           description: Internal server error.
 
 
-  /variant_distribution:
+  /variant_grouping:
     post:
-      operationId: server.api.variant_distribution
+      operationId: server.api.variant_grouping
       summary: >
         Returns the distribution of a variant inside a population having the required characteristics.
       description: >
-        Describes the distribution of a "target_variant" inside the set of individuals having the characteristics in "having_meta" and "having_variants". The distribution is shown by the attributes given in "distribute_by", and for each group of individuals, it is returned the number of individuals inside the group, the number of occurrences and the frequency of the variant.
+        Describes the distribution of a "target_variant" inside the set of individuals having the characteristics in "having_meta" and "having_variants". The distribution is shown by the attributes given in "group_by", and for each group of individuals, it is returned the number of individuals inside the group, the number of occurrences and the frequency of the variant.
       requestBody:
         required: true
         content:
@@ -165,13 +165,13 @@ paths:
               type: object
               required:
                 - having_meta
-                - distribute_by
+                - group_by
                 - target_variant
               properties:
                 source:
                   $ref: '#/components/schemas/GenomicSource'
-                distribute_by:
-                  $ref: '#/components/schemas/DistributeBy'
+                group_by:
+                  $ref: '#/components/schemas/GroupBy'
                 having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 having_variants:
@@ -181,7 +181,7 @@ paths:
             examples:
               Distribution by population of variant rs367896724 in East Asian females having variants in genomic interval:
                 value:
-                  distribute_by: [population]
+                  group_by: [population]
                   having_meta:
                     assembly: hg19
                     super_population: [EAS]
@@ -196,7 +196,7 @@ paths:
                     id: rs367896724
               Distribution by population of variant rs367896724 in East Asian females having variant 1-10351--A:
                 value:
-                  distribute_by: [population]
+                  group_by: [population]
                   having_meta:
                     assembly: hg19
                     super_population: [EAS]
@@ -210,17 +210,17 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
-            
-              The result lists a column for each attribute passed in the distribute_by parameter, follwed by:
+
+              The result lists a column for each attribute passed in the group_by parameter, follwed by:
               - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
               - POSITIVE_DONORS: number of donors owning the target variant.
               - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
               - FREQUENCY: frequence of the target variant in the considered population computed as
-              
-                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_ 
-                
+
+                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_
+
                 where _total alleles_ matches _2 * POPULATION_SIZE_ in autosomal chromosomes and pseudo-autosomal regions, _2 * females + males_ if the target variant is located on chromosome X (23), _males_ if the target variant is located on chromosome Y (24) and _males + females_ if the target variant is located on mitochondrial chromosome (25). Donors with unkown gender are automatically removed from the population when this information is required (this and other edge cases are signaled in the response data).
-              
+
 
               Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
           content:
@@ -259,7 +259,7 @@ paths:
       description: >-
         The parameters "having_meta" and "having_variants" contribute to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to limit the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
 
-          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
+          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_grouping. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
       requestBody:
         required: true
         content:
@@ -302,16 +302,16 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the size of the population considered, the number of individuals owning the variant, the occurrence and the frequency. The second item ("rows") is an array where each element is itself an array representing the values making a row of the table.
-            
-            
+
+
             About the columns meaning:
               - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
               - POSITIVE_DONORS: number of donors owning the target variant.
               - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
               - FREQUENCY: frequence of the target variant in the considered population computed as
-              
-                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_ 
-              
+
+                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_
+
                 where _total alleles_ matches _2 * POPULATION_SIZE_ in autosomal chromosomes and pseudo-autosomal regions, _2 * females + males_ if the target variant is located on chromosome X (23), _males_ if the target variant is located on chromosome Y (24) and _males + females_ if the target variant is located on mitochondrial chromosome (25). Donors with unkown gender are automatically removed from the population when this information is required (this and other edge cases are signaled in the response data).
 
               Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
@@ -352,7 +352,7 @@ paths:
       description: >-
         The parameters "having_meta" and "having_variants" contribute to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to limit the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
 
-          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_distribution. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
+          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_grouping. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
       requestBody:
         required: true
         content:
@@ -395,15 +395,15 @@ paths:
         '200':
           description: >-
             A table represented as a JSON object. The first item ("columns") is an array of the table column names, which includes the identifier of the variant using its coordinates (chrom, start, ref, alt), followed by the size of the population considered, the number of individuals owning the variant, the occurrence and the frequency. The second item ("rows") is an array where each element is itself an array representing the values making a row of the table.
-            
+
               About the columns meaning:
               - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
               - POSITIVE_DONORS: number of donors owning the target variant.
               - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
               - FREQUENCY: frequence of the target variant in the considered population computed as
-              
-                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_ 
-              
+
+                _OCCURRENCE_OF_TARGET_VARIANT_ / _total alleles_
+
                where _total alleles_ matches _2 * POPULATION_SIZE_ in autosomal chromosomes and pseudo-autosomal regions, _2 * females + males_ if the target variant is located on chromosome X (23), _males_ if the target variant is located on chromosome Y (24) and _males + females_ if the target variant is located on mitochondrial chromosome (25). Donors with unkown gender are automatically removed from the population when this information is required (this and other edge cases are signaled in the response data).
 
               Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
@@ -693,7 +693,7 @@ components:
             type: string
             enum: [germline, somatic]
 
-    DistributeBy:
+    GroupBy:
       type: array
       items:
         type: string

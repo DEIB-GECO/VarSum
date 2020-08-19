@@ -35,7 +35,7 @@ class ReqParamKeys:
     OUT_MAX_FREQUENCY = 'max_frequency'
     OUT_LIMIT = 'limit'
 
-    BY_ATTRIBUTES = 'distribute_by'
+    BY_ATTRIBUTES = 'group_by'
 
     TARGET_VARIANT = 'target_variant'
 
@@ -75,7 +75,7 @@ def run():
 
 
 # ###########################       ENDPOINTS
-def donor_distribution(body):
+def donor_grouping(body):
     def go():
         req_logger.info(f'new request to /donor_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
@@ -85,7 +85,7 @@ def donor_distribution(body):
     return try_and_catch(go, req_logger)
 
 
-def variant_distribution(body):
+def variant_grouping(body):
     def go():
         req_logger.info(f'new request to /variant_distribution with request_body: {body}')
         params = prepare_body_parameters(body)

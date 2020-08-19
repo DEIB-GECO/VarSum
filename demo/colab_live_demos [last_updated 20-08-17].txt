@@ -1,8 +1,8 @@
-donor_distribution_part_1.iypnb https://colab.research.google.com/drive/1Mutc71GeMPNtLRO3HlUyccY1-X4q7tel
+donor_grouping_part_1.iypnb https://colab.research.google.com/drive/1Mutc71GeMPNtLRO3HlUyccY1-X4q7tel
 
-donor_distribution_part_2.iypnb https://colab.research.google.com/drive/1_g5TokSU60tkXVeB6sEtt9iA1Ky60yDm
+donor_grouping_part_2.iypnb https://colab.research.google.com/drive/1_g5TokSU60tkXVeB6sEtt9iA1Ky60yDm
 
-variant_distribution.iypnb https://colab.research.google.com/drive/1l0ux51MceYTSwLTHV5kUIhPsWtKzp_PQ
+variant_grouping.iypnb https://colab.research.google.com/drive/1l0ux51MceYTSwLTHV5kUIhPsWtKzp_PQ
 
 rarest_variants.iypnb https://colab.research.google.com/drive/1v5ZFDh1KyHjs9ItN-zr4jOTNbhyHVrDK
 
