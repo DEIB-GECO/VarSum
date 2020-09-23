@@ -1,5 +1,5 @@
 {'meta': {
-    'health_status': "true",
+    'healthy': True,
     'population': ['BEB'],
     'gender': 'female',
     'assembly': 'hg19'

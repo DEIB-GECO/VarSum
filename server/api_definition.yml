@@ -16,7 +16,7 @@ info:
       ## How to
       - [(video) Exploring the documentation ](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ESEAJhaYj-FHh3AfcVYkp0wBDcI7djdLQm_twsIdjSpdTw?e=qMKfkY)
       - [(video) Try the API by yourself](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ETN9_W7Z9xtMpg4l0UwfzTwBcDKvFkJ1eUKxGOcEvQGzIw?e=R9YFnZ)
-  version: 1.3.0
+  version: 1.4.0
 servers:
   - url: /popstudy/api/
 paths:
@@ -35,7 +35,7 @@ paths:
           style: simple
           schema:
             type: string
-            enum: [assembly, gender, population, super_population, dna_source, health_status, gene_type, ethnicity, disease]
+            enum: [assembly, gender, population, super_population, dna_source, healthy, gene_type, ethnicity, disease]
       responses:
         '200':
           description: >-
@@ -102,7 +102,7 @@ paths:
                   having_meta:
                     assembly: hg19
                     super_population: [EAS]
-                    health_status: 'true'
+                    healthy: true
                   having_variants:
                     with: [id: rs367896724]
               Europeans with any variant in gene DDX11L1 by population:
@@ -111,7 +111,7 @@ paths:
                   having_meta:
                     assembly: hg19
                     super_population: [EUR]
-                    health_status: 'true'
+                    healthy: true
                   having_variants:
                     in:
                       name: DDX11L1
@@ -181,11 +181,11 @@ paths:
             examples:
               Distribution by population of variant rs367896724 in East Asian females having variants in genomic interval:
                 value:
-                  group_by: [population]
+
                   having_meta:
                     assembly: hg19
                     super_population: [EAS]
-                    health_status: 'true'
+                    healthy: true
                     gender: female
                   having_variants:
                     in:
@@ -194,24 +194,36 @@ paths:
                       stop: 34000
                   target_variant:
                     id: rs367896724
+                  group_by: [population]
               Distribution by population of variant rs367896724 in East Asian females having variant 1-10351--A:
                 value:
-                  group_by: [population]
                   having_meta:
                     assembly: hg19
                     super_population: [EAS]
-                    health_status: 'true'
+                    healthy: true
                     gender: female
                   having_variants:
                     with: [{chrom: 1, start: 10351, ref: "", alt: "A"}]
                   target_variant:
                     id: rs367896724
+                  group_by: [population]
+              Distribution by disease of somatic mutation rs61750632 in unhealthy individuals of white ethnicity:
+                value:
+                  having_meta:
+                    assembly: hg19
+                    ethnicity: [white]
+                    healthy: false
+                  having_variants:
+                    in_cell_type: [somatic]
+                  target_variant:
+                    id: rs61750632
+                  group_by: [disease]
       responses:
         '200':
           description: >-
             A table represented as a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
 
-              The result lists a column for each attribute passed in the group_by parameter, follwed by:
+              The result lists a column for each attribute passed in the group_by parameter, followed by:
               - POPULATION_SIZE: number of donors in the partition identified by the combination of attributes in the row.
               - POSITIVE_DONORS: number of donors owning the target variant.
               - OCCURRENCE_OF_TARGET_VARIANT: total number of times the target variant is present in the set of positive donors.
@@ -259,7 +271,7 @@ paths:
       description: >-
         The parameters "having_meta" and "having_variants" contribute to define a population of individuals having certain characteristics. This method returns the list of the most common variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to limit the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value greater than a given threshold.
 
-          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_grouping. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
+          __WARNING: When including samples from the source 1000Genomes, this operation is very computational demanding because of the high number of variants to be considered. In this case, before continuing with the desired request, it is strongly suggested to have an estimate of the expected waiting time by enabling the option "filter_output": { "time_estimate_only" : true } in the query parameters.__
       requestBody:
         required: true
         content:
@@ -284,19 +296,31 @@ paths:
                     limit:
                       type: integer
                       example: 10
+                    time_estimate_only:
+                      type: boolean
             examples:
-              Most common variants below 99.8% in females from Bangladesh having variants 1-13271-G-C and rs367896724:
+              Most common somatic mutations in males from Asia:
+                value:
+                  having_meta:
+                    assembly: hg19
+                    ethnicity: [asian]
+                    healthy: false
+                    gender: male
+                  having_variants:
+                    in_cell_type: [somatic]
+              Most common variants below 99.8% in females from Bangladesh having variants 1-13272-G-C and rs367896724:
                 value:
                   filter_output:
                     limit: 5
                     max_frequency: 0.998
+                    time_estimate_only: true
                   having_meta:
                     assembly: hg19
                     population: [BEB]
-                    health_status: 'true'
+                    healthy: true
                     gender: female
                   having_variants:
-                    with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
+                    with: [{chrom: 1, start: 13272, ref: "G", alt: "C"}, {id: rs367896724}]
 
       responses:
         '200':
@@ -333,7 +357,7 @@ paths:
               example:
 
                 columns: ['CHROM', 'START', 'REF', 'ALT', 'POPULATION_SIZE', 'POSITIVE_DONORS', 'OCCURRENCE_OF_VARIANT', 'FREQUENCY_OF_VARIANT']
-                rows: [['1', '10768', 'G', 'T', 11, 8, 16, 0.727272], ['1', '102889', '', 'GT', 11, 8, 13, 0.590909]]
+                rows: [[1, 10768, 'G', 'T', 11, 8, 16, 0.727272], [1, 102889, '', 'GT', 11, 8, 13, 0.590909]]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':
@@ -352,7 +376,7 @@ paths:
       description: >-
         The parameters "having_meta" and "having_variants" contribute to define a population of individuals having certain characteristics. This method returns the list of the rarest variants calculated as the number of occurrences of a variant owned by some of the individuals over the number of total alleles in the population. Furthermore, it is possible to limit the number of rows returned by each genomic data source (default is 10) and filter out the variants with a frequency value lower than a given threshold.
 
-          __WARNING: As this operation is very demanding, it is strongly suggested to use it only on a small population size. You can check the size of the considered population sending a request with some meta/region constraints to the endpoint /donor_grouping. The estimated execution time is nearly 8 seconds * (number of individuals) up to 149 individuals, and ~45 minutes above such number.__
+          __WARNING: When including samples from the source 1000Genomes, this operation is very computational demanding because of the high number of variants to be considered. In this case, before continuing with the desired request, it is strongly suggested to have an estimate of the expected waiting time by enabling the option "filter_output": { "time_estimate_only" : true } in the query parameters.__
       requestBody:
         required: true
         content:
@@ -377,19 +401,31 @@ paths:
                     limit:
                       type: integer
                       example: 10
+                    time_estimate_only:
+                      type: boolean
             examples:
-              Rarest variants above 0.99% in females from Bangladesh having variants 1-13271-G-C and rs367896724:
+              Rarest somatic mutations in individuals affected by esophageal carcinoma and carrying any variant in gene VWA5B1:
+                value:
+                  having_meta:
+                    assembly: hg19
+                    disease: "esophageal carcinoma"
+                  having_variants:
+                   in_cell_type: [somatic]
+                   in:
+                    name: VWA5B1
+              Rarest variants above 0.99% in females from Bangladesh having variants 1-13272-G-C and rs367896724:
                 value:
                   filter_output:
                     limit: 5
                     min_frequency: 0.0099
+                    time_estimate_only: true
                   having_meta:
                     assembly: hg19
                     population: [BEB]
-                    health_status: 'true'
+                    healthy: true
                     gender: female
                   having_variants:
-                    with: [{chrom: 1, start: 13271, ref: "G", alt: "C"}, {id: rs367896724}]
+                    with: [{chrom: 1, start: 13272, ref: "G", alt: "C"}, {id: rs367896724}]
 
       responses:
         '200':
@@ -461,7 +497,7 @@ paths:
                 value:
                   assembly: hg19
                   chrom: 1
-                  start: 13271
+                  start: 13272
                   ref: "G"
                   alt: "C"
               Annotate variant having id:
@@ -646,8 +682,8 @@ components:
           uniqueItems: true
           items:
             type: string
-        health_status:
-          type: string
+        healthy:
+          type: boolean
         disease:
           type: string
       required:

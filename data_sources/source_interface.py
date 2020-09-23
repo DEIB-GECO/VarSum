@@ -62,7 +62,7 @@ class Source:
         raise NotImplementedError('Any subclass of Source must implement the abstract method "variant_occurrence".')
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
-                                   freq_threshold: float, limit_result: int) -> FromClause:
+                                   freq_threshold: float, limit_result: int, time_estimate_only: bool) -> FromClause:
         """
         Requests a source to return the top "limit_result" variants in the most common/rarest variants in the selected
         population of individuals. The selected population is the one having meta_attrs and region_attrs.

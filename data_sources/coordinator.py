@@ -43,7 +43,6 @@ class Coordinator:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
         answer_204_if_no_source_can_answer(eligible_sources)
-        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
         by_attributes_copy = by_attributes.copy()
@@ -88,6 +87,7 @@ class Coordinator:
             raise NoDataFromSources(self.notices)
         else:
             # aggregate the results of all the queries
+            self.warn_if_mixed_germline_somatic_vars(eligible_sources)
             by_attributes_as_columns = [column(att.name) for att in by_attributes]
             if with_download_url:
                 download_col = [func.string_agg(
@@ -117,7 +117,6 @@ class Coordinator:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
         answer_204_if_no_source_can_answer(eligible_sources)
-        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
         by_attributes_copy = set(by_attributes)
@@ -163,6 +162,7 @@ class Coordinator:
         if len(from_sources) == 0:
             raise NoDataFromSources(self.notices)
         else:
+            self.warn_if_mixed_germline_somatic_vars(eligible_sources)
             all_sources = union(*from_sources).alias('all_sources')
             chrom = region_of_variant[0]
             start = region_of_variant[1]
@@ -197,13 +197,13 @@ class Coordinator:
             return self.get_as_dictionary(stmt, 'VARIANT DISTRIBUTION')
 
     def rank_variants_by_freq(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
-                              out_min_freq: Optional[float], limit_result: Optional[int] = 10) -> dict:
+                              out_min_freq: Optional[float], limit_result: Optional[int] = 10,
+                              time_estimate_only: Optional[bool] = False) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         limit_result = limit_result or 10
         eligible_sources = [source for source in self.use_sources if
                             source.can_express_constraint(meta_attrs, region_attrs, source.rank_variants_by_frequency)]
         answer_204_if_no_source_can_answer(eligible_sources)
-        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
     
         def ask_to_source(source: Type[Source]):
             def do():
@@ -211,7 +211,7 @@ class Coordinator:
     
                 def rank_var(connection: Connection):
                     source_stmt = obj.rank_variants_by_frequency(connection, meta_attrs, region_attrs, ascending,
-                                                                 out_min_freq, limit_result)\
+                                                                 out_min_freq, limit_result, time_estimate_only)\
                         .alias(source.__name__)
                     return \
                         select([
@@ -235,8 +235,13 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            raise NoDataFromSources(self.notices)
+            if time_estimate_only:
+                self.notices.append(Notice("To see the ranked variants, run again this request with the option 'time_estimate_only' set to false."))
+                raise TimeEstimate(self.time_estimate, self.notices)
+            else:
+                raise NoDataFromSources(self.notices)
         else:
+            self.warn_if_mixed_germline_somatic_vars(eligible_sources)
             stmt = \
                 select([
                     column(Vocabulary.CHROM.name),
@@ -358,7 +363,6 @@ class Coordinator:
     def variants_in_genomic_interval(self, interval: GenomicInterval, meta_attrs: MetadataAttrs, region_attrs: Optional[RegionAttrs]) -> dict:
         eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.variants_in_region)]
         answer_204_if_no_source_can_answer(eligible_sources)
-        self.warn_if_mixed_germline_somatic_vars(eligible_sources)
         select_attrs = [Vocabulary.CHROM, Vocabulary.START, Vocabulary.REF, Vocabulary.ALT]
     
         def ask_to_source(source):
@@ -379,6 +383,7 @@ class Coordinator:
         if len(from_sources) == 0:
             raise NoDataFromSources(self.notices)
         else:
+            self.warn_if_mixed_germline_somatic_vars(eligible_sources)
             # no need for select distinct as the union does that already
             stmt = \
                 select(['*']) \
@@ -540,7 +545,10 @@ class Coordinator:
     def source_message_handler(self, msg_type: SourceMessage.Type, msg: str):
         self.logger.info(f'SourceMessage: TYPE: {msg_type.name}. CONTENT: {msg}')
         if msg_type == SourceMessage.Type.TIME_TO_FINISH:
-            self.observer_callback(msg)
+            if hasattr(self, "time_estimate"):
+                self.time_estimate = max(int(msg), self.time_estimate)
+            else:
+                self.time_estimate = int(msg)
         else:
             self.notices.append(Notice(msg))
 
@@ -560,7 +568,7 @@ class Coordinator:
 def answer_204_if_no_source_can_answer(eligible_sources):
     if len(eligible_sources) == 0:
         raise AskUserIntervention(
-            "No data source can satisfy the given request parameters. If possible, try relaxing some constraints.", 422)
+            "No data source can satisfy the given request parameters. If possible, try relaxing some constraints.", 204)
 
 
 class AskUserIntervention(Exception):
@@ -573,11 +581,30 @@ class AskUserIntervention(Exception):
 class NoDataFromSources(Exception):
 
     response_body = None
-    proposed_status_code = 400
+    proposed_status_code = 204
 
     def __init__(self, notices=None):
         super().__init__(notices)
+        self.response_body = {
+            'notice': 'No sample satisfies the requested parameters. The selected population is empty.'
+        }
         if notices:
             self.response_body = {
                 'notice': [notice.args[0] for notice in notices]
             }
+
+
+class TimeEstimate(Exception):
+    response_body = None
+    proposed_status_code = 200
+
+    def __init__(self, estimated_time_in_seconds: int, notices=None):
+        super().__init__()
+        minutes, sec = divmod(estimated_time_in_seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        time_string = "%d:%02d:%02d [h:mm:ss]" % (hours, minutes, sec)
+        self.response_body = {
+            'notice': [f'Estimated execution time: ~{time_string}']
+        }
+        if notices:
+            self.response_body['notice'].extend([notice.args[0] for notice in notices])

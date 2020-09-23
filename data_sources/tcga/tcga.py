@@ -1,3 +1,5 @@
+import locale
+
 from ..source_interface import *
 from ..io_parameters import *
 from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, text, literal, column, types, case, intersect
@@ -156,7 +158,7 @@ class TCGA(Source):
         return stmt
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
-                                   freq_threshold: float, limit_result: int) -> FromClause:
+                                   freq_threshold: float, limit_result: int, time_estimate_only: bool) -> FromClause:
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
@@ -178,6 +180,14 @@ class TCGA(Source):
         other_genders = reduce(lambda x1, x2: x1+x2, [el[1] for el in gender_of_individuals]) - males - females
         self.logger.debug(f'TCGA: request /rank_variants_by_frequency for a population of {males+females+other_genders} individuals')
 
+        if time_estimate_only:
+            approx_pop_size = males+females+other_genders
+            self.notify_message(SourceMessage.Type.TIME_TO_FINISH, str(int(0.3*approx_pop_size)))
+            self.notify_message(SourceMessage.Type.GENERAL_WARNING, f'Samples to analyze in TCGA: {approx_pop_size}')
+            locale.setlocale(locale.LC_ALL, '')
+            estimated_n_variants = 232 * approx_pop_size
+            self.notify_message(SourceMessage.Type.GENERAL_WARNING, f'Estimated number of variants to rank in TCGA: ~{estimated_n_variants:n}')
+            raise EmptyResult('TCGA')
         if other_genders > 0:
             self.notify_message(
                 SourceMessage.Type.GENERAL_WARNING,
@@ -329,7 +339,7 @@ class TCGA(Source):
                 'asian'
             ],
             self.meta_col_map[Vocabulary.HEALTH_STATUS]: [
-                'false'
+                False
             ],
             'mut_type': ['SNP', 'DEL', 'INS', 'DNP', 'TNP'],
         }
@@ -432,8 +442,8 @@ class TCGA(Source):
                  ")")))
         if self.meta_attrs.gender:
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
-        if self.meta_attrs.health_status:
-            if self.meta_attrs.health_status == "true":
+        if self.meta_attrs.health_status is not None:
+            if self.meta_attrs.health_status is True:
                 raise EmptyResult('TCGA')
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
         if self.meta_attrs.disease:
@@ -687,9 +697,7 @@ class TCGA(Source):
             return list()
         else:
             if result.rowcount > 1:
-                self.logger.error(f'user searched for variant: chrom {str(variant.chrom)}, start {str(variant)}, '
-                                  f'ref {str(variant.ref)}, alt {str(variant.alt)}, id {str(variant.id)}'
-                                  f'but two results were found')
+                self.logger.error(f'user searched for variant: {str(variant)}, but two results were found')
             final_result = result.fetchone().values()
             result.close()
             return final_result

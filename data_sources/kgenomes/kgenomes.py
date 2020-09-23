@@ -1,3 +1,5 @@
+import locale
+
 from ..source_interface import *
 from ..io_parameters import *
 from sqlalchemy import MetaData, Table, cast, select, union_all, union, tuple_, func, exists, asc, desc, intersect, literal, column, types, text
@@ -147,7 +149,7 @@ class KGenomes(Source):
         return stmt
 
     def rank_variants_by_frequency(self, connection, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, ascending: bool,
-                                   freq_threshold: float, limit_result: int) -> FromClause:
+                                   freq_threshold: float, limit_result: int, time_estimate_only: bool) -> FromClause:
         # init state
         self.connection = connection
         self._set_meta_attributes(meta_attrs)
@@ -170,6 +172,14 @@ class KGenomes(Source):
         females = next((el[1] for el in gender_of_individuals if el[0] == 'female'), 0)
         males = next((el[1] for el in gender_of_individuals if el[0] == 'male'), 0)
         population_size = males + females
+        if time_estimate_only:
+            estimated_time = str(9*population_size) if population_size <= 149 else "2700"  # ~45 min if pop > 149
+            self.notify_message(SourceMessage.Type.TIME_TO_FINISH, estimated_time)
+            self.notify_message(SourceMessage.Type.GENERAL_WARNING, f'Genomes to analyze in 1000Genomes: {population_size}')
+            locale.setlocale(locale.LC_ALL, '')
+            estimated_n_variants = 4144924*population_size
+            self.notify_message(SourceMessage.Type.GENERAL_WARNING, f'Estimated number variants to rank in 1000Genomes: ~{estimated_n_variants:n}')
+            raise EmptyResult('1000Genomes')
 
         # reduce size of the join with genomes table
         genomes_red = select(
@@ -309,7 +319,7 @@ class KGenomes(Source):
                 'asian'
             ],
             self.meta_col_map[Vocabulary.HEALTH_STATUS]: [
-                'true'
+                True
             ],
             self.meta_col_map[Vocabulary.DISEASE]: [
                 'none'
@@ -416,8 +426,8 @@ class KGenomes(Source):
 
         if self.meta_attrs.gender:
             query = query.where(metadata.c.gender == self.meta_attrs.gender)
-        if self.meta_attrs.health_status:
-            if self.meta_attrs.health_status == "false":
+        if self.meta_attrs.health_status is not None:
+            if self.meta_attrs.health_status is False:
                 raise EmptyResult('1000Genomes')
             query = query.where(metadata.c.health_status == self.meta_attrs.health_status)
         if self.meta_attrs.disease:

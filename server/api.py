@@ -1,7 +1,7 @@
 import connexion
 from data_sources.io_parameters import *
 from flask import redirect
-from data_sources.coordinator import Coordinator, AskUserIntervention, NoDataFromSources
+from data_sources.coordinator import Coordinator, AskUserIntervention, NoDataFromSources, TimeEstimate
 import sqlalchemy.exc
 from prettytable import PrettyTable
 from loguru import logger
@@ -14,7 +14,8 @@ class ReqParamKeys:
     META = 'having_meta'
     OF = 'of'  # is used as alias of having_meta in the context of: find variants in region
     GENDER = 'gender'
-    HEALTH_STATUS = 'health_status'
+    HEALTH_STATUS = 'healthy'
+    HEALTH_STATUS_ALT = 'health_status'
     DNA_SOURCE = 'dna_source'
     ASSEMBLY = 'assembly'
     POPULATION_CODE = 'population'
@@ -34,6 +35,7 @@ class ReqParamKeys:
     OUT_MIN_FREQUENCY = 'min_frequency'
     OUT_MAX_FREQUENCY = 'max_frequency'
     OUT_LIMIT = 'limit'
+    OUT_TIME_ESTIMATE_ONLY = 'time_estimate_only'
 
     BY_ATTRIBUTES = 'group_by'
 
@@ -99,7 +101,7 @@ def most_common_variants(body):
     def go():
         req_logger.info(f'new request to /most_common_variants with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], False, params[6], params[5])
+        result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], False, params[6], params[5], params[9])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -109,7 +111,7 @@ def rarest_variants(body):
     def go():
         req_logger.info(f'new request to /rarest_variants with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], True, params[4], params[5])
+        result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], True, params[4], params[5], params[9])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -212,15 +214,17 @@ def prepare_body_parameters(body):
     out_limit = None
     out_min_frequency = None
     out_max_frequency = None
+    out_time_estimate_only = False
     output = body.get(ReqParamKeys.OUTPUT)
     if output is not None:
         out_limit = output.get(ReqParamKeys.OUT_LIMIT)
         out_max_frequency = output.get(ReqParamKeys.OUT_MAX_FREQUENCY)
         out_min_frequency = output.get(ReqParamKeys.OUT_MIN_FREQUENCY)
+        out_time_estimate_only = output.get(ReqParamKeys.OUT_TIME_ESTIMATE_ONLY) or False
 
     include_download_url = body.get(ReqParamKeys.INCLUDE_DOWNLOAD_URL) or False
 
-    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency, include_download_url, var_sources
+    return meta, variants, by_attributes, target_variant, out_min_frequency, out_limit, out_max_frequency, include_download_url, var_sources, out_time_estimate_only
 
 
 def parse_to_mutation_array(dict_array_of_mutations):
@@ -268,7 +272,7 @@ def parse_name_to_vocabulary(name: str):
         return Vocabulary.SUPER_POPULATION
     elif name == ReqParamKeys.DNA_SOURCE:
         return Vocabulary.DNA_SOURCE
-    elif name == ReqParamKeys.HEALTH_STATUS:
+    elif name == ReqParamKeys.HEALTH_STATUS or name == ReqParamKeys.HEALTH_STATUS_ALT:
         return Vocabulary.HEALTH_STATUS
     elif name == ReqParamKeys.ASSEMBLY:
         return Vocabulary.ASSEMBLY
@@ -315,6 +319,8 @@ def try_and_catch(function, request_logger, *args, **kwargs):
         request_logger.warning(f'Sources produced no data. Potential notices: {e.response_body}')
         # don't delete the braces, or Flask can't unpack the result correctly
         return (e.response_body, e.proposed_status_code) if e.response_body is not None else service_unavailable_message(request_logger)
+    except TimeEstimate as e:
+        return e.response_body, e.proposed_status_code
     except sqlalchemy.exc.OperationalError:  # database connection not available / user canceled query
         request_logger.exception('database connection not available / user canceled query')
         return service_unavailable_message(request_logger)

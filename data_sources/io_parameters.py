@@ -139,7 +139,7 @@ class MetadataAttrs:
 
     def __init__(self,
                  gender: Optional[str] = None,
-                 health_status: Optional[str] = None,
+                 health_status: Optional[bool] = None,
                  dna_source: Optional[list] = None,
                  assembly: str = None,
                  population: Optional[list] = None,
@@ -156,7 +156,7 @@ class MetadataAttrs:
             self.gender = None
             self.free_dimensions.append(Vocabulary.GENDER)
 
-        if health_status:
+        if health_status is not None:
             self.health_status = health_status
             self.constrained_dimensions.append(Vocabulary.GENDER.HEALTH_STATUS)
         else:
