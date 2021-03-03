@@ -413,7 +413,7 @@ paths:
                    in_cell_type: [somatic]
                    in:
                     name: VWA5B1
-              Rarest variants above 0.99% in females from Bangladesh having variants 1-13272-G-C and rs367896724:
+              Rarest variants shared by at least 0.99% of females from Bangladesh having variants 1-13272-G-C and rs367896724:
                 value:
                   filter_output:
                     limit: 5
@@ -426,6 +426,17 @@ paths:
                     gender: female
                   having_variants:
                     with: [{chrom: 1, start: 13272, ref: "G", alt: "C"}, {id: rs367896724}]
+              Rarest samatic mutations among individuals with gender 'not reported' and variant rs137852216 (SNP 23:64192229:G>A):
+                value:
+                  filter_output:
+                    limit: 20
+                  having_meta:
+                    assembly: grch38
+                    gender: not reported
+                  having_variants:
+                    with: [{id: rs137852216}]
+                    in_cell_type: [somatic]
+
 
       responses:
         '200':
