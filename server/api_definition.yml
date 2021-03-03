@@ -89,8 +89,6 @@ paths:
                   $ref: '#/components/schemas/GenomicSource'
                 group_by:
                   $ref: '#/components/schemas/GroupBy'
-                donors_download_url:
-                  type: boolean
                 having_meta:
                   $ref: '#/components/schemas/FilterMetadata'
                 having_variants:
@@ -472,6 +470,83 @@ paths:
               example:
                 columns: ['CHROM', 'START', 'REF', 'ALT', 'POPULATION_SIZE', 'POSITIVE_DONORS', 'OCCURRENCE_OF_VARIANT', 'FREQUENCY_OF_VARIANT']
                 rows: [[1,  76836,  'T',  'G',  22,  1,  1,  0.022727], [1,  77872,  'G',  'A',  22,  1,  2,  0.045454]]
+        '300':
+          description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
+        '400':
+          description: Syntax error in the request body section. It could be caused by a mispelled body or an incomplete variant description.
+        '404':
+          description: The given gene is not present in our database.
+        '503':
+          description: Internal server error.
+
+
+  /download_donors:
+    post:
+      operationId: server.api.download_donors
+      summary: >
+        Lists the donors inside the population and provides the name of the
+        source as well as the download links for metadata and region attributes of each.
+      description: >
+        Given a set of characteristics (parameters "having_meta" and "having_variants"), this method selects the individuals having these features and returns a table indicating, for each of them, the data
+           source name and the links for downloading metadata and region data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - having_meta
+              properties:
+                source:
+                  $ref: '#/components/schemas/GenomicSource'
+                having_meta:
+                  $ref: '#/components/schemas/FilterMetadata'
+                having_variants:
+                  $ref: '#/components/schemas/FilterVariants'
+            examples:
+              East Asian with variant rs367896724:
+                value:
+                  having_meta:
+                    assembly: hg19
+                    super_population: [EAS]
+                    healthy: true
+                  having_variants:
+                    with: [id: rs367896724]
+              Europeans with any variant in gene DDX11L1:
+                value:
+                  having_meta:
+                    assembly: hg19
+                    super_population: [EUR]
+                    healthy: true
+                  having_variants:
+                    in:
+                      name: DDX11L1
+                      type: pseudogene
+      responses:
+        '200':
+          description: >-
+            A table represented as a JSON object. The first key is "columns" which is an array telling the names and the order of the columns of the result. The second and last key is an array, where each element is itself an array containing the values for the columns in this object.
+
+              Note: The response example below is only a demonstration of the output syntax and do not necessarily reflect any of the example requests listed for this endpoint.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columns:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+              example:
+                columns: ['SOURCE', 'DONORS', 'DOWNLOAD_REGION_URL', 'DOWNLOAD_METADATA_URL']
+                rows: [['1000Genomes', 'SRS000626', 'http://genomic.deib.polimi.it/gmql-rest/datasets/public.HG19_1000GENOMES_2020_01/NA12348/region?authToken=DOWNLOAD-TOKEN', 'http://genomic.deib.polimi.it/gmql-rest/datasets/public.HG19_1000GENOMES_2020_01/NA12348/metadata?authToken=DOWNLOAD-TOKEN'], ['1000Genomes', 'SRS008533', 'http://genomic.deib.polimi.it/gmql-rest/datasets/public.HG19_1000GENOMES_2020_01/HG00263/region?authToken=DOWNLOAD-TOKEN', 'http://genomic.deib.polimi.it/gmql-rest/datasets/public.HG19_1000GENOMES_2020_01/HG00263/metadata?authToken=DOWNLOAD-TOKEN']]
         '300':
           description: Multiple genes match the given information. Please add further details like the gene type or, even better, the gene ensemble id in order to reduce the ambiguity.
         '400':

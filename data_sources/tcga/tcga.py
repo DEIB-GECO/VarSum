@@ -65,6 +65,10 @@ class TCGA(Source):
         self.my_meta_t: Optional[Table] = None
         self.my_region_t: Optional[Table] = None
 
+    @classmethod
+    def pretty_name(cls):
+        return 'TCGA'
+
     # SOURCE INTERFACE
     def donors(self, connection, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
                with_download_urls: bool) -> Selectable:
@@ -91,7 +95,7 @@ class TCGA(Source):
 
         # compute statistics
         if with_download_urls:
-            columns_of_interest.append(public_item.c.local_url.label(Vocabulary.DOWNLOAD_URL.name))
+            columns_of_interest.append(public_item.c.local_url.label(Vocabulary.DOWNLOAD_REGION_URL.name))
         stmt = select(columns_of_interest)
         if self.my_region_t is not None:
             stmt = stmt.where(self.my_meta_t.c.item_id.in_(

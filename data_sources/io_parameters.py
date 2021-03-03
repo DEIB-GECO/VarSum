@@ -215,7 +215,8 @@ class Vocabulary(Enum):
     ASSEMBLY = 4
     POPULATION = 5
     SUPER_POPULATION = 6
-    DOWNLOAD_URL = 7
+    DOWNLOAD_REGION_URL = 71
+    DOWNLOAD_META_URL = 72
     DONOR_ID = 8
     ETHNICITY = 9
     DISEASE = 10

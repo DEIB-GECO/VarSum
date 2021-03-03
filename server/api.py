@@ -81,7 +81,7 @@ def donor_grouping(body):
     def go():
         req_logger.info(f'new request to /donor_distribution with request_body: {body}')
         params = prepare_body_parameters(body)
-        result = Coordinator(req_logger, params[8]).donor_distribution(params[2], params[0], params[1], params[7])
+        result = Coordinator(req_logger, params[8]).donor_distribution(params[2], params[0], params[1])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)
@@ -112,6 +112,16 @@ def rarest_variants(body):
         req_logger.info(f'new request to /rarest_variants with request_body: {body}')
         params = prepare_body_parameters(body)
         result = Coordinator(req_logger, params[8]).rank_variants_by_freq(params[0], params[1], True, params[4], params[5], params[9])
+        return result
+    req_logger = unique_logger()
+    return try_and_catch(go, req_logger)
+
+
+def download_donors(body):
+    def go():
+        req_logger.info(f'new request to /download_donors with request_body: {body}')
+        params = prepare_body_parameters(body)
+        result = Coordinator(req_logger, params[8]).download_donors(params[0], params[1])
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)

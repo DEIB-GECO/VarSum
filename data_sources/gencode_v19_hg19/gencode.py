@@ -39,6 +39,10 @@ class Gencode(AnnotInterface):
         self.connection: Optional[Connection] = None
         self.init_singleton_table()
 
+    @classmethod
+    def pretty_name(cls):
+        return 'Gencode'
+
     def annotate(self, connection: Connection, genomic_interval: GenomicInterval, attrs: Optional[List[Vocabulary]], assembly) -> Selectable:
         """
         :param connection:

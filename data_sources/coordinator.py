@@ -18,12 +18,12 @@ def default_user_callback(*msg) -> None:
 
 
 gen_var_sources = {
-    '1000Genomes': KGenomes,
-    'TCGA': TCGA
+    KGenomes.pretty_name(): KGenomes,
+    TCGA.pretty_name(): TCGA
 }
-# gen_var_sources: Sequence[Type[Source]] = (
-#     KGenomes, TCGA
-# )
+annot_sources = {
+    Gencode.pretty_name(): Gencode
+}
 _annotation_sources: Iterable[Type[AnnotInterface]] = [
     Gencode
 ]
@@ -38,8 +38,78 @@ class Coordinator:
         self.use_sources = [gen_var_sources[name] for name in filter_sources] or gen_var_sources.values() if filter_sources else gen_var_sources.values()
         self.observer_callback = observer
 
-    def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs,
-                           with_download_url: bool) -> dict:
+    def download_donors(self, meta_attrs: MetadataAttrs, region_attrs: RegionAttrs) -> dict:
+        region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
+        eligible_sources = [source for source in self.use_sources if
+                            source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
+        answer_204_if_no_source_can_answer(eligible_sources)
+
+        desired_attributes = [Vocabulary.DONOR_ID]
+
+        # collect results from individual sources
+        def ask_to_source(source: Type[Source]):
+            def do():
+                obj: Source = source(self.logger)
+
+                def donors(a_connection):
+                    source_stmt = obj.donors(a_connection, desired_attributes, meta_attrs, region_attrs,
+                                      with_download_urls=True)\
+                        .alias(source.__name__)
+                    return \
+                        select([literal(source.pretty_name(), types.String).label('SOURCE'),
+                                column(Vocabulary.DONOR_ID.name), column(Vocabulary.DOWNLOAD_REGION_URL.name)])\
+                        .select_from(source_stmt)
+
+                return database.try_py_function(donors)
+            return self.try_catch_source_errors(do, None)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_sources)) as executor:
+            from_sources = executor.map(ask_to_source, eligible_sources)
+
+        # remove failures
+        from_sources = [result for result in from_sources if result is not None]
+        if len(from_sources) == 0:
+            raise NoDataFromSources(self.notices)
+        else:
+            # aggregate the results of all the queries
+            self.warn_if_mixed_germline_somatic_vars(eligible_sources)
+
+            download_region_col = func.replace(column(Vocabulary.DOWNLOAD_REGION_URL.name), "www.gmql.eu", "genomic.deib.polimi.it")
+            download_region_col = func.concat(download_region_col, '?authToken=DOWNLOAD-TOKEN')
+
+            # download_meta_col = func.replace(column(Vocabulary.DOWNLOAD_REGION_URL.name), "www.gmql.eu", "genomic.deib.polimi.it")
+            # download_meta_col = func.replace(download_meta_col, '/region', '/metadata')
+            # download_meta_col = func.concat(download_meta_col, '?authToken=DOWNLOAD-TOKEN')
+
+            all_columns = [
+                column('SOURCE'),
+                column(Vocabulary.DONOR_ID.name).label('DONORS'),
+                download_region_col.label(Vocabulary.DOWNLOAD_REGION_URL.name)
+                # download_meta_col.label(Vocabulary.DOWNLOAD_META_URL.name)
+            ]
+
+            stmt = \
+                select(all_columns)\
+                .select_from(union(*from_sources).alias("all_sources"))\
+                .order_by(column('SOURCE'))
+
+            result = self.get_as_dictionary(stmt, 'DOWNLOAD SAMPLES')
+            rows_enriched = []
+
+            result['columns'] = result['columns'] + ['DOWNLOAD_METADATA_URL']
+            for row in result['rows']:
+                # there's one row for each donor
+                if row[-1] is not None:
+                    meta_url = row[-1].replace('region', 'metadata')
+                else:
+                    meta_url = None
+                rows_enriched.append([*row, meta_url])
+            result['rows'] = rows_enriched
+
+            return result
+
+    def donor_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs,
+                           region_attrs: RegionAttrs) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.donors)]
         answer_204_if_no_source_can_answer(eligible_sources)
@@ -64,12 +134,9 @@ class Coordinator:
                         select_from_source_output.append(column(elem.name))
                     else:
                         select_from_source_output.append(cast(literal(Vocabulary.unknown.name), types.String).label(elem.name))
-
-                if with_download_url:
-                    select_from_source_output.append(column(Vocabulary.DOWNLOAD_URL.name))
     
                 def donors(a_connection):
-                    source_stmt = obj.donors(a_connection, selectable_attributes, meta_attrs, region_attrs, with_download_url)\
+                    source_stmt = obj.donors(a_connection, selectable_attributes, meta_attrs, region_attrs, False)\
                         .alias(source.__name__)
                     return \
                         select(select_from_source_output) \
@@ -89,28 +156,16 @@ class Coordinator:
             # aggregate the results of all the queries
             self.warn_if_mixed_germline_somatic_vars(eligible_sources)
             by_attributes_as_columns = [column(att.name) for att in by_attributes]
-            if with_download_url:
-                download_col = [func.string_agg(
-                    func.concat(column(Vocabulary.DOWNLOAD_URL.name), '?authToken=DOWNLOAD-TOKEN'),
-                    ', ').label(Vocabulary.DOWNLOAD_URL.name)]
-            else:
-                download_col = []
+
             stmt = \
                 select(
                     by_attributes_as_columns +
-                    [func.count(column(Vocabulary.DONOR_ID.name)).label('DONORS')] +
-                    download_col
+                    [func.count(column(Vocabulary.DONOR_ID.name)).label('DONORS')]
                 )\
                 .select_from(union(*from_sources).alias("all_sources"))\
                 .group_by(func.cube(*by_attributes_as_columns))
 
             result = self.get_as_dictionary(stmt, 'DONOR DISTRIBUTION')
-            if with_download_url:
-                rows = result['rows']
-                for row in rows:
-                    # here "row" is the string concatenation of all the sample urls in this group
-                    if row[-1] is not None:
-                        row[-1] = row[-1].replace("www.gmql.eu", "genomic.deib.polimi.it")
             return result
 
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
@@ -608,3 +663,12 @@ class TimeEstimate(Exception):
         }
         if notices:
             self.response_body['notice'].extend([notice.args[0] for notice in notices])
+
+
+def get_source_name_from_source_type(source_class: Type[Source]) -> str:
+    for k, v in gen_var_sources.items():
+        if v == source_class:
+            return k
+    for k, v in annot_sources.items():
+        if v == source_class:
+            return k

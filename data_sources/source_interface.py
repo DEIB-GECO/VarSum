@@ -159,3 +159,7 @@ class Source:
             raise NotImplementedError('Source concrete implementations need to override class '
                                       'dictionary "meta_col_map" and set "avail_region_constraints"')
         return cls.meta_col_map.keys()
+
+    @classmethod
+    def pretty_name(cls):
+        return cls.__name__
