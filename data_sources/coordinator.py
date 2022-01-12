@@ -171,6 +171,7 @@ class Coordinator:
     def variant_distribution(self, by_attributes: List[Vocabulary], meta_attrs: MetadataAttrs, region_attrs: RegionAttrs, variant: Mutation) -> dict:
         region_attrs = self.replace_gene_with_interval(region_attrs, meta_attrs.assembly)
         eligible_sources = [source for source in self.use_sources if source.can_express_constraint(meta_attrs, region_attrs, source.variant_occurrence)]
+        self.logger.warning(f"eligible sources are {eligible_sources}")
         answer_204_if_no_source_can_answer(eligible_sources)
     
         # sorted copy of ( by_attributes + donor_id ) 'cos we need the same table schema from each source
@@ -290,7 +291,7 @@ class Coordinator:
         # remove failures
         from_sources = [result for result in from_sources if result is not None]
         if len(from_sources) == 0:
-            if time_estimate_only:
+            if time_estimate_only and hasattr(self, "time_estimate"):
                 self.notices.append(Notice("To see the ranked variants, run again this request with the option 'time_estimate_only' set to false."))
                 raise TimeEstimate(self.time_estimate, self.notices)
             else:
@@ -636,7 +637,7 @@ class AskUserIntervention(Exception):
 class NoDataFromSources(Exception):
 
     response_body = None
-    proposed_status_code = 204
+    proposed_status_code = 400
 
     def __init__(self, notices=None):
         super().__init__(notices)

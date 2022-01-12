@@ -363,7 +363,7 @@ paths:
                   target_variant:
                     id: rs367896724
                   group_by: [population]
-              Distribution by population of variant rs367896724 in East Asian females having variant 1-10351--A:
+              Distribution by population of variant rs367896724 in East Asian females having variant 1-10352--A:
                 value:
                   having_meta:
                     assembly: hg19
@@ -371,7 +371,7 @@ paths:
                     healthy: true
                     gender: female
                   having_variants:
-                    with: [{chrom: 1, start: 10351, ref: "", alt: "A"}]
+                    with: [{chrom: 1, start: 10352, ref: "", alt: "A"}]
                   target_variant:
                     id: rs367896724
                   group_by: [population]

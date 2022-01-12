@@ -161,21 +161,30 @@ class KGenomes(Source):
         self._set_region_attributes(region_attrs)
         self.create_table_of_regions(['item_id'])
 
-        if self.my_region_t is None:
-            raise Notice("1000Genomes data set is too broad. Please restrict the population size by setting at least one "
-                         "region constraint imposing the presence of one or more variants in a precise locus or genomic "
-                         "area.")
+        # if self.my_region_t is None:
+        #     raise Notice("1000Genomes data set is too broad. Please restrict the population size by setting at least one "
+        #                  "region constraint imposing the presence of one or more variants in a precise locus or genomic "
+        #                  "area.")
 
         females_and_males_stmt = \
-            select([self.my_meta_t.c.gender, func.count(self.my_meta_t.c.item_id)]) \
-            .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id]))) \
-            .group_by(self.my_meta_t.c.gender)
+            select([self.my_meta_t.c.gender, func.count(self.my_meta_t.c.item_id)])
+        if self.my_region_t is not None:
+            females_and_males_stmt = females_and_males_stmt\
+                .where(self.my_meta_t.c.item_id.in_(select([self.my_region_t.c.item_id])))
+        females_and_males_stmt = females_and_males_stmt.group_by(self.my_meta_t.c.gender)
+
         gender_of_individuals = [row.values() for row in connection.execute(females_and_males_stmt).fetchall()]
         if len(gender_of_individuals) == 0:
             raise EmptyResult('1000Genomes')
         females = next((el[1] for el in gender_of_individuals if el[0] == 'female'), 0)
         males = next((el[1] for el in gender_of_individuals if el[0] == 'male'), 0)
         population_size = males + females
+
+        if population_size > 150:
+            raise Notice(
+                f"1000Genomes data set is too broad. Please restrict the population size by setting more constraints. "
+                f"This query is allowed for populations smaller than 150. Currently selected is {population_size}")
+
         if time_estimate_only:
             estimated_time = str(9*population_size) if population_size <= 149 else "2700"  # ~45 min if pop > 149
             self.notify_message(SourceMessage.Type.TIME_TO_FINISH, estimated_time)
