@@ -91,25 +91,25 @@ This paragraph applies to endpoints `donor_grouping`, `variant_grouping`, `most_
 To select a population, the user can express any combination of metadata and region constraints, and also restrict the data sources to use. The skeleton of a request body making use of all the possible constraints, looks like the following:
 ```yaml
 {
-	"having_meta": {
-		"gender": ...,				# the required gender
-		"dna_source": ..., 			# the originating tissue type 
-		"assembly": ...,			# 'grch38' or 'hg19'
-		"ethnicity": ...,			# a list of ethnicities
-		"super_population": ...,	# a list of super populations
-		"population": ...,			# a list of populations
-		"healthy": ...,				# true or false
-		"disease": ... 				# a disease name
-	},
-	"having_variants": {
-		"with": ...,				# a list of variants carried by every individual 
-		"without": ...,				# a list of variants not carried by any individual
-		"on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
-		"on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
-		"in": ...,					# a mutated genomic region 
-		"in_cell_type": ...			# 'somatic' or 'germline'
-	},
-	"source": ...					# a list of sources from the ones available
+  "having_meta": {
+    "gender": ...,				# the required gender
+    "dna_source": ..., 			# the originating tissue type 
+    "assembly": ...,			# 'grch38' or 'hg19'
+    "ethnicity": ...,			# a list of ethnicities
+    "super_population": ...,	# a list of super populations
+    "population": ...,			# a list of populations
+    "healthy": ...,				# true or false
+    "disease": ... 				# a disease name
+  },
+  "having_variants": {
+    "with": ...,				# a list of variants carried by every individual 
+    "without": ...,				# a list of variants not carried by any individual
+    "on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
+    "on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
+    "in": ...,					# a mutated genomic region 
+    "in_cell_type": ...			# 'somatic' or 'germline'
+  },
+  "source": ...					# a list of sources from the ones available
 }
 ```
 - To leave unconstrained a parameter, just remove it from the above example.
@@ -121,54 +121,54 @@ To select a population, the user can express any combination of metadata and reg
 The endpoint `variants_in_region`  lists the variants falling in a region of interest for a population . The request body is an extension of the previous, with small changes.
 ```yaml
 {
-	# you can refer to any annotated region with the parameters
-	"name": ...,
-	"type": ...,
-	"ensemble_id": ...,
-	# or you can define your region of interest with
-	"chrom": ...,
-	"start": ...,
-	"stop": ...,
-	"strand": ...,
-	# then, you can limit the set of variants to those carried by the population defined as (only "assembly" is mandatory):
-	"of": {							
-		"gender": ...,				# the required gender
-		"dna_source": ..., 			# the originating tissue type 
-		"assembly": ...,			# 'grch38' or 'hg19'
-		"ethnicity": ...,			# a list of ethnicities
-		"super_population": ...,	# a list of super populations
-		"population": ...,			# a list of populations
-		"healthy": ...,				# true or false
-		"disease": ...,				# a disease name
-		"having_variants": {
-			"with": ...,				# a list of variants carried by every individual 
-			"without": ...,				# a list of variants not carried by any individual
-			"on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
-			"on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
-			"in": ...,					# a mutated genomic region 
-			"in_cell_type": ...			# 'somatic' or 'germline'
-		},
-	"source": ...					# a list of sources from the ones available
+  # you can refer to any annotated region with the parameters
+  "name": ...,
+  "type": ...,
+  "ensemble_id": ...,
+  # or you can define your region of interest with
+  "chrom": ...,
+  "start": ...,
+  "stop": ...,
+  "strand": ...,
+  # then, you can limit the set of variants to those carried by the population defined as (only "assembly" is mandatory):
+  "of": {							
+    "gender": ...,				# the required gender
+    "dna_source": ..., 			# the originating tissue type 
+    "assembly": ...,			# 'grch38' or 'hg19'
+    "ethnicity": ...,			# a list of ethnicities
+    "super_population": ...,	# a list of super populations
+    "population": ...,			# a list of populations
+    "healthy": ...,				# true or false
+    "disease": ...,				# a disease name
+    "having_variants": {
+      "with": ...,				# a list of variants carried by every individual 
+      "without": ...,				# a list of variants not carried by any individual
+      "on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
+      "on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
+      "in": ...,					# a mutated genomic region 
+      "in_cell_type": ...			# 'somatic' or 'germline'
+    },
+  "source": ...					# a list of sources from the ones available
 }
 ```
 
 Finally, the endpoint `annotate` tells you the genes that overlap (even not completely) with a given variant or genomic interval.  A simplified request body is exemplified below. 
 ```yaml
 {
-	"assembly": ..., 
-	# you can specify a variant by typing its:
-	# - dbSNP id
-	"id": ...,
-	# - or its genomic properties (in 0-based coordinates):
-	"chrom": ...,
-	"start": ...,
-	"ref": ...,
-	"alt": ...
-	# alternatively, you can instead type a genomic interval of interest:
-	"chrom": ...,
-	"start": ...,
-	"stop": ...,
-	"strand": ... 
+  "assembly": ..., 
+  # you can specify a variant by typing its:
+  # - dbSNP id
+  "id": ...,
+  # - or its genomic properties (in 0-based coordinates):
+  "chrom": ...,
+  "start": ...,
+  "ref": ...,
+  "alt": ...
+  # alternatively, you can instead type a genomic interval of interest:
+  "chrom": ...,
+  "start": ...,
+  "stop": ...,
+  "strand": ... 
 }
 ```
 
