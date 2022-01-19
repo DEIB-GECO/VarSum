@@ -175,7 +175,7 @@ Finally, the endpoint `annotate` tells you the genes that overlap (even not comp
 ## Additional Resources
    
    - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/DEIB-GECO/VarSum#abbreviations-and-terms)
-   - [Python Notebooks on GitHub](https://github.com/DEIB-GECO/VarSum/tree/master/demo) or [Google Colab](https://drive.google.com/drive/folders/1o-Rlv-lhcSGYPCsWvPaqQY4NN-kTcji9?usp=sharing)
+   - [Examples and Demonstrative applications (use cases)](https://github.com/DEIB-GECO/VarSum/tree/master/demo#varsum-httpgmqleupopstudy---examples--applications) as Python Notebooks on GitHub or Google Colab notebooks  
    - [GitHub project repository](https://github.com/DEIB-GECO/VarSum)
    
 ## How to
