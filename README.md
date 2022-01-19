@@ -1,4 +1,4 @@
-# Data summarization 1KGP (http://geco.deib.polimi.it/popstudy)
+# VarSum (http://geco.deib.polimi.it/popstudy)
 
 This API returns summary statistics on user-defined populations and their v
 ariants, using the genomic data repository maintained by the [genomic computing group 
@@ -174,9 +174,9 @@ Finally, the endpoint `annotate` tells you the genes that overlap (even not comp
 
 ## Additional Resources
    
-   - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
-   - [Python Notebooks demo](https://github.com/tomalf2/data_summarization_1KGP/tree/master/demo)
-   - [GitHub project repository](https://github.com/tomalf2/data_summarization_1KGP#data_summarization_1kgp)
+   - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/tomalf2/VarSum#abbreviations-and-terms)
+   - [Python Notebooks on GitHub](https://github.com/tomalf2/VarSum/tree/master/demo) or [Google Colab](https://drive.google.com/drive/folders/1o-Rlv-lhcSGYPCsWvPaqQY4NN-kTcji9?usp=sharing)
+   - [GitHub project repository](https://github.com/tomalf2/VarSum)
    
 ## How to
 

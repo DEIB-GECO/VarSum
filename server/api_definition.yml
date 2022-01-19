@@ -1,8 +1,8 @@
 openapi: 3.0.0
 info:
-  title: Data summarization 1KGP
+  title: VarSum
   description: |-
-    👁️‍🗨️ **For enhanced syntax highlighting, it is recommended to consult this documentation through the [project's GitHub webpage](https://github.com/tomalf2/data_summarization_1KGP/blob/master/README.md#data_summarization_1kgp).**
+    👁️‍🗨️ **For enhanced syntax highlighting, it is recommended to consult this documentation through the [project's GitHub webpage](https://github.com/tomalf2/VarSum/blob/master/README.md#varsum).**
 
     This API returns summary statistics on user-defined populations and their variants, using the genomic data repository maintained by the [genomic computing group (GeCo) at Politecnico di Milano](http://www.bioinformatics.deib.polimi.it/geco/).
 
@@ -178,9 +178,9 @@ info:
 
     # Additional Resources
 
-       - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/tomalf2/data_summarization_1KGP#abbreviations-and-terms)
-       - [Python Notebooks demo](https://github.com/tomalf2/data_summarization_1KGP/tree/master/demo)
-       - [GitHub project repository](https://github.com/tomalf2/data_summarization_1KGP#data_summarization_1kgp)
+     - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/tomalf2/VarSum#abbreviations-and-terms)
+     - [Python Notebooks on GitHub](https://github.com/tomalf2/VarSum/tree/master/demo) or [Google Colab](https://drive.google.com/drive/folders/1o-Rlv-lhcSGYPCsWvPaqQY4NN-kTcji9?usp=sharing)
+     - [GitHub project repository](https://github.com/tomalf2/VarSum)
 
     # How to
 
