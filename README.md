@@ -1,4 +1,4 @@
-# VarSum (http://geco.deib.polimi.it/popstudy)
+# VarSum (http://gmql.eu/popstudy)
 
 This API returns summary statistics on user-defined populations and their v
 ariants, using the genomic data repository maintained by the [genomic computing group 
@@ -70,7 +70,7 @@ A field `notice` may be optionally present to inform of characteristics of the r
 	```
 Only the endpoint `values` breaks the above rule, as it returns a mapping from values to the available data source names. For example, a request asking the values of the attribute "gender" returns:
 ```yaml
-# response of geco.deib.polimi.it/popstudy/values/gender at the time of writing
+# response of gmql.eu/popstudy/values/gender at the time of writing
 {
   "female": [
     "1000Genomes",
@@ -174,9 +174,9 @@ Finally, the endpoint `annotate` tells you the genes that overlap (even not comp
 
 ## Additional Resources
    
-   - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/tomalf2/VarSum#abbreviations-and-terms)
-   - [Python Notebooks on GitHub](https://github.com/tomalf2/VarSum/tree/master/demo) or [Google Colab](https://drive.google.com/drive/folders/1o-Rlv-lhcSGYPCsWvPaqQY4NN-kTcji9?usp=sharing)
-   - [GitHub project repository](https://github.com/tomalf2/VarSum)
+   - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/DEIB-GECO/VarSum#abbreviations-and-terms)
+   - [Python Notebooks on GitHub](https://github.com/DEIB-GECO/VarSum/tree/master/demo) or [Google Colab](https://drive.google.com/drive/folders/1o-Rlv-lhcSGYPCsWvPaqQY4NN-kTcji9?usp=sharing)
+   - [GitHub project repository](https://github.com/DEIB-GECO/VarSum)
    
 ## How to
 
