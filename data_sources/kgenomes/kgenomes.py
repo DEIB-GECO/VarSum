@@ -214,10 +214,15 @@ class KGenomes(Source):
 
         # Actually, self.my_region_t already contains only the individuals compatible with meta_attrs, but it can contain
         # duplicated item_id. Since we want to join, it's better to remove them.
-        sample_set_with_limit = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id])) \
-            .limit(population_size) \
-            .alias('sample_set')
         # LIMIT is part of a trick used to speed up the job. See later
+        if self.my_region_t is not None:
+            sample_set_with_limit = intersect(select([self.my_meta_t.c.item_id]), select([self.my_region_t.c.item_id])) \
+                .limit(population_size) \
+                .alias('sample_set')
+        else:
+            sample_set_with_limit = select([self.my_meta_t.c.item_id])\
+                .limit(population_size) \
+                .alias('sample_set')
 
         stmt = select([genomes_red.c.chrom.label(Vocabulary.CHROM.name),
                        genomes_red.c.start.label(Vocabulary.START.name),
