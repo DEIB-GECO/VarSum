@@ -97,7 +97,7 @@ info:
     	"having_meta": {
     		"gender": ...,				# the required gender
     		"dna_source": ..., 			# the originating tissue type
-    		"assembly": ...,			# 'grch38' or 'hg19'
+    		"assembly": ...,			# 'GRCh38' or 'hg19'
     		"ethnicity": ...,			# a list of ethnicities
     		"super_population": ...,	# a list of super populations
     		"population": ...,			# a list of populations
@@ -138,7 +138,7 @@ info:
     	"of": {
     		"gender": ...,				# the required gender
     		"dna_source": ..., 			# the originating tissue type
-    		"assembly": ...,			# 'grch38' or 'hg19'
+    		"assembly": ...,			# 'GRCh38' or 'hg19'
     		"ethnicity": ...,			# a list of ethnicities
     		"super_population": ...,	# a list of super populations
     		"population": ...,			# a list of populations
@@ -599,7 +599,7 @@ paths:
                   filter_output:
                     limit: 20
                   having_meta:
-                    assembly: grch38
+                    assembly: GRCh38
                     gender: not reported
                   having_variants:
                     with: [{id: rs137852216}]
@@ -745,7 +745,6 @@ paths:
                   properties:
                     assembly:
                       type: string
-                      enum: ['hg19', 'grch38']
                   required:
                     - assembly
             examples:
@@ -758,7 +757,7 @@ paths:
                   alt: "C"
               Annotate variant having id:
                 value:
-                  assembly: grch38
+                  assembly: GRCh38
                   id: rs121913500
               Annotate genomic interval:
                 value:

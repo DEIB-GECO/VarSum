@@ -144,12 +144,15 @@ def values(attribute):
 def annotate(body):
     def go():
         req_logger.info(f'new request to /annotate with request_body: {body}')
+        assembly = body.get(ReqParamKeys.ASSEMBLY)
+        if assembly:
+            assembly = assembly.lower()
         if body.get(ReqParamKeys.STOP):
             interval = parse_genomic_interval_from_dict(body)
-            result = Coordinator(req_logger).annotate_interval(interval, body.get(ReqParamKeys.ASSEMBLY))
+            result = Coordinator(req_logger).annotate_interval(interval, assembly)
         else:
             variant = parse_variant_from_dict(body)
-            result = Coordinator(req_logger).annotate_variant(variant, body.get(ReqParamKeys.ASSEMBLY))
+            result = Coordinator(req_logger).annotate_variant(variant, assembly)
         return result
     req_logger = unique_logger()
     return try_and_catch(go, req_logger)

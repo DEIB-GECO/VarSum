@@ -94,7 +94,7 @@ To select a population, the user can express any combination of metadata and reg
   "having_meta": {
     "gender": ...,				# the required gender
     "dna_source": ..., 			# the originating tissue type 
-    "assembly": ...,			# 'grch38' or 'hg19'
+    "assembly": ...,			# 'GRCh38' or 'hg19'
     "ethnicity": ...,			# a list of ethnicities
     "super_population": ...,	# a list of super populations
     "population": ...,			# a list of populations
@@ -134,7 +134,7 @@ The endpoint `variants_in_region`  lists the variants falling in a region of int
   "of": {							
     "gender": ...,				# the required gender
     "dna_source": ..., 			# the originating tissue type 
-    "assembly": ...,			# 'grch38' or 'hg19'
+    "assembly": ...,			# 'GRCh38' or 'hg19'
     "ethnicity": ...,			# a list of ethnicities
     "super_population": ...,	# a list of super populations
     "population": ...,			# a list of populations
