@@ -93,24 +93,24 @@ To select a population, the user can express any combination of metadata and reg
 ```yaml
 {
   "having_meta": {
-    "gender": ...,				# the required gender
-    "dna_source": ..., 			# the originating tissue type 
-    "assembly": ...,			# 'GRCh38' or 'hg19'
-    "ethnicity": ...,			# a list of ethnicities
+    "gender": ...,		# the required gender
+    "dna_source": ..., 		# the originating tissue type 
+    "assembly": ...,		# 'GRCh38' or 'hg19'
+    "ethnicity": ...,		# a list of ethnicities
     "super_population": ...,	# a list of super populations
-    "population": ...,			# a list of populations
-    "healthy": ...,				# true or false
-    "disease": ... 				# a disease name
+    "population": ...,		# a list of populations
+    "healthy": ...,		# true or false
+    "disease": ... 		# a disease name
   },
   "having_variants": {
-    "with": ...,				# a list of variants carried by every individual 
-    "without": ...,				# a list of variants not carried by any individual
+    "with": ...,		# a list of variants carried by every individual 
+    "without": ...,		# a list of variants not carried by any individual
     "on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
     "on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
-    "in": ...,					# a mutated genomic region 
+    "in": ...,				# a mutated genomic region 
     "in_cell_type": ...			# 'somatic' or 'germline'
   },
-  "source": ...					# a list of sources from the ones available
+  "source": ...				# a list of sources from the ones available
 }
 ```
 - To leave unconstrained a parameter, just remove it from the above example.
