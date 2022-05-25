@@ -68,7 +68,8 @@ A field `notice` may be optionally present to inform about the characteristics o
 		time_estimate_only: true
 	}
 	```
-Only the endpoint `/values` breaks the above rule, as it returns a mapping from values to the available data source names. For example, a request asking the values of the attribute "gender" returns:
+Only the endpoint `/values` breaks the above rule, as it returns the values of an attribute in the available data sources. 
+For example, a request asking the values of the attribute "gender" returns:
 ```yaml
 # response of gmql.eu/popstudy/values/gender at the time of writing
 {
