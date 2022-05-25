@@ -107,16 +107,16 @@ To select a population, the user can express any combination of metadata and reg
     "without": ...,		# a list of variants not carried by any individual
     "on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
     "on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
-    "in": ...,				# a mutated genomic region 
-    "in_cell_type": ...			# 'somatic' or 'germline'
+    "in": ...,			# a mutated genomic region 
+    "in_cell_type": ...		# 'somatic' or 'germline'
   },
-  "source": ...				# a list of sources from the ones available
+  "source": ...			# a list of sources from the ones available
 }
 ```
 - To leave unconstrained a parameter, just remove it from the above example.
 - Some parameters accept multiple values grouped inside a list, instead others can use only one value.
-- For a list of the values accepted by parameters in `having_meta`, you can call the endpoint `values` and pass the parameter name.
-- Each of the endpoints can require additional parameters to perform an action. If it is a "grouping" endpoint, it requires a `group_by` to specify one or more metadata categories; if it studies the frequency of a single variant, it requires a `target_variant`; lastly, endpoints `most_common_variants` and  `rarest_variants` offer the possibilty to partition the result table with `filter_output`.
+- For a list of the values accepted by parameters in `having_meta`, you can call the endpoint `/values` and pass the parameter name.
+- Each of the endpoints can require additional parameters to perform an action. If it is a "grouping" endpoint, it requires a `group_by` to specify one or more metadata categories; if it studies the frequency of a single variant, it requires a `target_variant`; lastly, endpoints `/most_common_variants` and  `/rarest_variants` offer the possibilty to partition the result table with `filter_output`.
 
 ### Request parameters for exploring a genomic region
 The endpoint `variants_in_region`  lists the variants falling in a region of interest for a population . The request body is an extension of the previous, with small changes.
