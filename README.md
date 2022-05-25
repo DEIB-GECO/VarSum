@@ -185,7 +185,7 @@ Finally, the endpoint `/annotate` tells you the genes that overlap (even not com
 - [(video) Try the API by yourself](https://polimi365-my.sharepoint.com/:v:/g/personal/10435046_polimi_it/ETN9_W7Z9xtMpg4l0UwfzTwBcDKvFkJ1eUKxGOcEvQGzIw?e=R9YFnZ)
 
 ## Abbreviations and terms
-As a reference, below are listed some abbreviations in use.
+As a reference, some abbreviations in use are listed below.
 
 #### Ethnicity - Country and Continent of provenance
 
