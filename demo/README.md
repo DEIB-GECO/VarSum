@@ -1,6 +1,6 @@
 # VarSum (http://gmql.eu/popstudy) - examples / applications
 
-In this page are listed some examples (EX1,EX2,EX3,EX4) that can be used to familiarize
+In this page are listed some examples (EX1, EX2, EX3, EX4) that can be used to familiarize
 with the API endpoints and the syntax of parameters.
  - EX 1 - Use of donor_grouping - part 1 [Jupyter Notebook on GitHub](https://github.com/DEIB-GECO/VarSum/blob/master/demo/EX%201%20-%20Use%20of%20donor_grouping%20-%20part%201.ipynb) | [Google Colab Notebook](https://colab.research.google.com/drive/1crA-1qtdGF_ahPZhCaxz0fqdZaU9NWDl?usp=sharing)
  - EX 2 - Use of donor_grouping - part 2 [Jupyter Notebook on GitHub](https://github.com/DEIB-GECO/VarSum/blob/master/demo/EX%202%20-%20Use%20of%20donor_grouping%20-%20part%202.ipynb) | [Google Colab Notebook](https://colab.research.google.com/drive/16lnbCznZhblPZkhrE-yDME68xCMR7UYy?usp=sharing)
