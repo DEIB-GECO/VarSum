@@ -71,7 +71,7 @@ A field `notice` may be optionally present to inform about the characteristics o
 Only the endpoint `/values` breaks the above rule, as it returns the values of an attribute in the available data sources. 
 For example, a request asking the values of the attribute "gender" returns:
 ```yaml
-# response of gmql.eu/popstudy/values/gender at the time of writing
+# response of gmql.eu/popstudy/api/values/gender at the time of writing
 {
   "female": [
     "1000Genomes",
