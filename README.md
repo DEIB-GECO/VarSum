@@ -10,7 +10,7 @@ The Cancer Genomes Atlas Program (~4 millions).
 
 Through this tool, it is possible to get summary statistics describing 
 a population, including:
-- Number of individuals grouped by sub-populations.
+- Number of individuals grouped by sub-populations
 - Most frequent variants
 - Rarest variants
 - Average mutation frequency in multiple population subgroups.
