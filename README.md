@@ -1,7 +1,7 @@
 # VarSum (http://gmql.eu/popstudy)
 
-This API returns summary statistics on user-defined populations and their v
-ariants, using the genomic data repository maintained by the [genomic computing group 
+This API returns summary statistics on user-defined populations and their variants, 
+using the genomic data repository maintained by the [genomic computing group 
 (GeCo) at Politecnico di Milano](http://www.bioinformatics.deib.polimi.it/geco/). 
 
 Available data include gene annotations, germline variants from the 1000 
