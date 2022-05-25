@@ -29,7 +29,7 @@ set of individuals of interest to the ones having certain characteristics.
 
 The user can also impose further constraints on the target population, like 
 the presence/absence of specific variants and their relative position (same or different 
-chromosome copy) and also impose the presence of variants in a precise 
+chromosome copy), and also impose the presence of variants in a precise 
 genomic area or gene.
 
 
@@ -55,7 +55,7 @@ In general, this API returns a table-like data structure, represented as:
 }
 ```
 where `columns` and `rows` contain the table headers and rows respectively. 
-A field `notice` may be optionally present to inform of characteristics of the requested data that can lead to unexpected results or to provide complementary details. This happens when one or more of the following conditions is verified:
+A field `notice` may be optionally present to inform about the characteristics of the requested data that can lead to unexpected results, or to provide complementary details. This happens when one or more of the following conditions is verified:
 
 - A part of the population selected by the user cannot be used to produce the result because of unkown/unrecognized cathegorical values. 
 	
