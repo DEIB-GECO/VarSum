@@ -24,7 +24,7 @@ Subgroups are identified by distributing the population according to:
 - Disease
 - Source of the DNA sample.
 
-Where each of the above characteristics can be fixed in order to restrict the 
+Each of the above characteristics can be fixed in order to restrict the 
 set of individuals of interest to the ones having certain characteristics. 
 
 The user can also impose further constraints on the target population, like 
