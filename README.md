@@ -88,7 +88,7 @@ For example, a request asking the values of the attribute "gender" returns:
 ``` 
 
 ### Request parameters for studying a population
-This paragraph applies to endpoints `donor_grouping`, `variant_grouping`, `most_common_variants`, `rarest_variants` and `download_donors`. 
+This paragraph applies to endpoints `/donor_grouping`, `/variant_grouping`, `/most_common_variants`, `/rarest_variants` and `/download_donors`. 
 To select a population, the user can express any combination of metadata and region constraints, and also restrict the data sources to use. The skeleton of a request body making use of all the possible constraints, looks like the following:
 ```yaml
 {
