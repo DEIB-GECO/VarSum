@@ -119,7 +119,7 @@ To select a population, the user can express any combination of metadata and reg
 - Each of the endpoints can require additional parameters to perform an action. If it is a "grouping" endpoint, it requires a `group_by` to specify one or more metadata categories; if it studies the frequency of a single variant, it requires a `target_variant`; lastly, endpoints `/most_common_variants` and  `/rarest_variants` offer the possibilty to partition the result table with `filter_output`.
 
 ### Request parameters for exploring a genomic region
-The endpoint `variants_in_region`  lists the variants falling in a region of interest for a population . The request body is an extension of the previous, with small changes.
+The endpoint `/variants_in_region`  lists the variants falling in a region of interest for a population. The request body is an extension of the previous, with small changes.
 ```yaml
 {
   # you can refer to any annotated region with the parameters
@@ -133,27 +133,27 @@ The endpoint `variants_in_region`  lists the variants falling in a region of int
   "strand": ...,
   # then, you can limit the set of variants to those carried by the population defined as (only "assembly" is mandatory):
   "of": {							
-    "gender": ...,				# the required gender
+    "gender": ...,			# the required gender
     "dna_source": ..., 			# the originating tissue type 
     "assembly": ...,			# 'GRCh38' or 'hg19'
     "ethnicity": ...,			# a list of ethnicities
-    "super_population": ...,	# a list of super populations
+    "super_population": ...,		# a list of super populations
     "population": ...,			# a list of populations
-    "healthy": ...,				# true or false
-    "disease": ...,				# a disease name
+    "healthy": ...,			# true or false
+    "disease": ...,			# a disease name
     "having_variants": {
-      "with": ...,				# a list of variants carried by every individual 
-      "without": ...,				# a list of variants not carried by any individual
+      "with": ...,			# a list of variants carried by every individual 
+      "without": ...,			# a list of variants not carried by any individual
       "on_same_chrom_copy": ...,	# a list of variants of a single chromosome and all carried by each individual on either the paternal or maternal chromosome 
       "on_diff_chrom_copy": ...,	# two variants of a single chromosome and carried by each individual one on the paternal and the other on the maternal chromosome (order is irrelevant)
-      "in": ...,					# a mutated genomic region 
-      "in_cell_type": ...			# 'somatic' or 'germline'
+      "in": ...,			# a mutated genomic region 
+      "in_cell_type": ...		# 'somatic' or 'germline'
     },
-  "source": ...					# a list of sources from the ones available
+  "source": ...				# a list of sources from the ones available
 }
 ```
 
-Finally, the endpoint `annotate` tells you the genes that overlap (even not completely) with a given variant or genomic interval.  A simplified request body is exemplified below. 
+Finally, the endpoint `/annotate` tells you the genes that overlap (even not completely) with a given variant or genomic interval.  A simplified request body is exemplified below. 
 ```yaml
 {
   "assembly": ..., 
@@ -175,7 +175,7 @@ Finally, the endpoint `annotate` tells you the genes that overlap (even not comp
 
 ## Additional Resources
    
-   - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/DEIB-GECO/VarSum#abbreviations-and-terms)
+   - [Populations, ethnicity and other abbreviations used in the data sources](https://github.com/DEIB-GECO/VarSum#abbreviations-and-terms)
    - [Examples and Demonstrative applications (use cases)](https://github.com/DEIB-GECO/VarSum/tree/master/demo#varsum-httpgmqleupopstudy---examples--applications) as Python Notebooks on GitHub or Google Colab notebooks  
    - [GitHub project repository](https://github.com/DEIB-GECO/VarSum)
    
