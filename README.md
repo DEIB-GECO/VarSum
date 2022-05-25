@@ -6,7 +6,7 @@ using the genomic data repository maintained by the [genomic computing group
 
 Available data include gene annotations, germline variants from the 1000 
 Genomes Project (~88 millions) and somatic mutations collected by 
-The Cancer Genomes Atlas Program (~4 millions)
+The Cancer Genomes Atlas Program (~4 millions).
 
 Through this tool, it is possible to get summary statistics describing 
 a population, including:
