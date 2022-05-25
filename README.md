@@ -41,7 +41,7 @@ Requests and responses are exchanged  as JSON formatted messages.
 
 ### Response format
 
-In general, this API returns a table-like data structure, represented as
+In general, this API returns a table-like data structure, represented as:
    
 ```yaml
 {
