@@ -62,13 +62,13 @@ A field `notice` may be optionally present to inform about the characteristics o
 	For example, when computing the frequency of a variant falling in sex chromosome, individuals with unknown gender will be automatically excluded from the population selected by the user. That is because the gender information is necessary to compute the total number of alleles in that locus of the considered population.  
 - The population identified by the request parameters is empty because no individual satisfies the requirements in the available data sources.
 - The popuation identified by the request parameters originates from multiple data sources and contains both germline variants and somatic mutations. 
-- A request made to endpoints `most_common_variants` or `rarest_variants` includes the optional parameter 
+- A request made to endpoints `/most_common_variants` or `/rarest_variants` includes the optional parameter 
 	```yaml
 	filter_output: {
 		time_estimate_only: true
 	}
 	```
-Only the endpoint `values` breaks the above rule, as it returns a mapping from values to the available data source names. For example, a request asking the values of the attribute "gender" returns:
+Only the endpoint `/values` breaks the above rule, as it returns a mapping from values to the available data source names. For example, a request asking the values of the attribute "gender" returns:
 ```yaml
 # response of gmql.eu/popstudy/values/gender at the time of writing
 {
