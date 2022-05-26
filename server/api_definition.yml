@@ -12,7 +12,7 @@ info:
 
     Through this tool, it is possible to get summary statistics describing
     a population, including:
-    - **Number of individuals grouped by sub-populations.**
+    - **Number of individuals grouped by sub-populations**
     - **Most frequent variants**
     - **Rarest variants**
     - **Average mutation frequency in multiple population subgroups.**
@@ -26,12 +26,12 @@ info:
     - Disease
     - Source of the DNA sample.
 
-    Where each of the above characteristics can be fixed in order to restrict the
+    Each of the above characteristics can be fixed in order to restrict the
     set of individuals of interest to the ones having certain characteristics.
 
     The user can also impose further constraints on the target population, like
     the presence/absence of specific variants and their relative position (same or different
-    chromosome copy) and also impose the presence of variants in a precise
+    chromosome copy), and also impose the presence of variants in a precise
     genomic area or gene.
 
 
@@ -41,7 +41,7 @@ info:
 
        ## Response format
 
-       In general, this API returns a table-like data structure, represented as
+       In general, this API returns a table-like data structure, represented as:
 
       ```yaml
       {
@@ -56,23 +56,23 @@ info:
       ```
 
     where `columns` and `rows` contain the table headers and rows respectively.
-    A field `notice` may be optionally present to inform of characteristics of the requested data that can lead to unexpected results or to provide complementary details. This happens when one or more of the following conditions is verified:
+    A field `notice` may be optionally present to inform about the characteristics of the requested data that can lead to unexpected results, or to provide complementary details. This happens when one or more of the following conditions is verified:
 
     - A part of the population selected by the user cannot be used to produce the result because of unkown/unrecognized cathegorical values.
 
     	For example, when computing the frequency of a variant falling in sex chromosome, individuals with unknown gender will be automatically excluded from the population selected by the user. That's because the gender information is necessary to compute the total number of alleles in that locus of the considered population.
     - The population identified by the request parameters is empty because no individual satisfies the requirements in the available data sources.
     - The popuation identified by the request parameters originates from multiple data sources and contains both germline variants and somatic mutations.
-    - A request made to endpoints `most_common_variants` or `rarest_variants` includes the optional parameter
+    - A request made to endpoints `/most_common_variants` or `/rarest_variants` includes the optional parameter
       	```yaml
       	filter_output: {
       		time_estimate_only: true
       	}
       	```
-    Only the endpoint `values` breaks the above rule, as it returns a mapping from values to the available data source names. For example, a request asking the values of the attribute "gender" returns:
+    Only the endpoint `/values` breaks the above rule, as it returns the values of an attribute in the available data sources. For example, a request asking the values of the attribute "gender" returns:
 
       ```yaml
-      # response of gmql.eu/popstudy/values/gender at the time of writing
+      # response of gmql.eu/popstudy/api/values/gender at the time of writing
       {
         "female": [
           "1000Genomes",
@@ -90,8 +90,8 @@ info:
 
     ## Request parameters for studying a population
 
-    This paragraph applies to endpoints `donor_grouping`, `variant_grouping`, `most_common_variants`, `rarest_variants` and `download_donors`.
-    To select a population, the user can express any combination of metadata and region constraints, and also restrict the data sources to use. The skeleton of a request body making use of all the possible constraints, looks like the following:
+    This paragraph applies to endpoints `/donor_grouping`, `/variant_grouping`, `/most_common_variants`, `/rarest_variants` and `/download_donors`.
+    To select a population, the user can express any combination of metadata and region constraints, and also restrict the data sources to use. The skeleton of a request body making use of all the possible constraints looks like the following:
     ```yaml
     {
     	"having_meta": {
@@ -117,12 +117,12 @@ info:
     ```
     - To leave unconstrained a parameter, just remove it from the above example.
     - Some parameters accept multiple values grouped inside a list, instead others can use only one value.
-    - For a list of the values accepted by parameters in `having_meta`, you can call the endpoint `values` and pass the parameter name.
-    - Each of the endpoints can require additional parameters to perform an action. If it is a "grouping" endpoint, it requires a `group_by` to specify one or more metadata categories; if it studies the frequency of a single variant, it requires a `target_variant`; lastly, endpoints `most_common_variants` and  `rarest_variants` offer the possibilty to partition the result table with `filter_output`.
+    - For a list of the values accepted by parameters in `having_meta`, you can call the endpoint `/values` and pass the parameter name.
+    - Each of the endpoints can require additional parameters to perform an action. If it is a "grouping" endpoint, it requires a `group_by` to specify one or more metadata categories; if it studies the frequency of a single variant, it requires a `target_variant`; lastly, endpoints `/most_common_variants` and  `/rarest_variants` offer the possibilty to partition the result table with `filter_output`.
 
     ## Request parameters for exploring a genomic region
 
-    The endpoint `variants_in_region`  lists the variants falling in a region of interest for a population . The request body is an extension of the previous, with small changes.
+    The endpoint `/variants_in_region`  lists the variants falling in a region of interest for a population. The request body is an extension of the previous, with small changes.
     ```yaml
     {
     	# you can refer to any annotated region with the parameters
@@ -156,7 +156,7 @@ info:
     }
     ```
 
-    Finally, the endpoint `annotate` tells you the genes that overlap (even not completely) with a given variant or genomic interval.  A simplified request body is exemplified below.
+    Finally, the endpoint `/annotate` tells you the genes that overlap (even not completely) with a given variant or genomic interval.  A simplified request body is exemplified below.
     ```yaml
     {
     	"assembly": ...,
@@ -178,7 +178,7 @@ info:
 
     # Additional Resources
 
-     - [Populations, ethncicity and other abbreviations used in the data sources](https://github.com/DEIB-GECO/VarSum#abbreviations-and-terms)
+     - [Populations, ethnicity and other abbreviations used in the data sources](https://github.com/DEIB-GECO/VarSum#abbreviations-and-terms)
      - [Python Notebooks on GitHub](https://github.com/DEIB-GECO/VarSum/tree/master/demo) or [Google Colab](https://drive.google.com/drive/folders/1o-Rlv-lhcSGYPCsWvPaqQY4NN-kTcji9?usp=sharing)
      - [GitHub project repository](https://github.com/DEIB-GECO/VarSum)
 
@@ -655,7 +655,7 @@ paths:
       operationId: server.api.download_donors
       summary: >
         Lists the donors inside the population and provides the name of the
-        source as well as the download links for metadata and region attributes of each.
+        source as well as the download links for metadata and region attributes of each donor.
       description: >
         Given a set of characteristics (parameters "having_meta" and "having_variants"), this method selects the individuals having these features and returns a table indicating, for each of them, the data
            source name and the links for downloading metadata and region data.
@@ -801,7 +801,7 @@ paths:
     post:
       operationId: server.api.variants_in_region
       summary: >-
-        Returns the list of variants falling in the area of interest
+        Returns the list of variants falling in the area of interest.
       requestBody:
         required: true
         content:
