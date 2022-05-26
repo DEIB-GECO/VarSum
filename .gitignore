@@ -2,3 +2,4 @@ __pycache__/
 .idea/
 logs/
 .commit_msg.git-commit
+/tests/
